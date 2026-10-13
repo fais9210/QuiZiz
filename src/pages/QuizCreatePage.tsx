@@ -54,12 +54,17 @@ import {
   Sparkles,
   Wand2,
   Brain,
-  Loader2
+  Loader2,
+  Code2,
+  BookOpen,
+  Layers,
+  CheckCircle
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 import { motion, AnimatePresence } from 'motion/react';
-
 import { useTranslation } from 'react-i18next';
+import { TIF_QUESTION_BANKS, TIFQuestionPreset } from '../data/tifQuestionBanks';
+import CodeRenderer from '../components/CodeRenderer';
 
 interface LocalQuestion extends Partial<Question> {
   tempId: string;
@@ -75,6 +80,90 @@ export default function QuizCreatePage() {
   const [savingTemplate, setSavingTemplate] = useState(false);
   const [templates, setTemplates] = useState<QuizTemplate[]>([]);
   const [showTemplates, setShowTemplates] = useState(false);
+  const [showTifBank, setShowTifBank] = useState(false);
+
+  const setQuickSchedule = (type: 'always' | '2hours' | 'today' | '24hours') => {
+    const pad = (n: number) => n.toString().padStart(2, '0');
+    const formatDateTime = (d: Date) => {
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    };
+
+    const now = new Date();
+    if (type === 'always') {
+      setStartDate('');
+      setEndDate('');
+      Swal.fire({
+        title: 'Jadwal Diperbarui',
+        text: 'Kuis diatur selalu terbuka (tanpa batas waktu akses).',
+        icon: 'success',
+        timer: 1500,
+        showConfirmButton: false
+      });
+    } else if (type === '2hours') {
+      const end = new Date(now.getTime() + 2 * 60 * 60 * 1000);
+      setStartDate(formatDateTime(now));
+      setEndDate(formatDateTime(end));
+      Swal.fire({
+        title: 'Sesi Kuliah Aktif (2 Jam)',
+        text: 'Kuis terbuka mulai sekarang hingga 2 jam ke depan.',
+        icon: 'success',
+        timer: 1800,
+        showConfirmButton: false
+      });
+    } else if (type === 'today') {
+      const end = new Date(now);
+      end.setHours(23, 59, 0, 0);
+      setStartDate(formatDateTime(now));
+      setEndDate(formatDateTime(end));
+      Swal.fire({
+        title: 'Kuis Hari Ini',
+        text: 'Kuis dibuka hingga pukul 23:59 malam ini.',
+        icon: 'success',
+        timer: 1800,
+        showConfirmButton: false
+      });
+    } else if (type === '24hours') {
+      const end = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+      setStartDate(formatDateTime(now));
+      setEndDate(formatDateTime(end));
+      Swal.fire({
+        title: 'Kuis 24 Jam',
+        text: 'Kuis dibuka selama 24 jam ke depan.',
+        icon: 'success',
+        timer: 1800,
+        showConfirmButton: false
+      });
+    }
+  };
+
+  const loadTifBankPreset = (preset: TIFQuestionPreset) => {
+    const newQuestions: LocalQuestion[] = preset.questions.map(q => ({
+      tempId: crypto.randomUUID(),
+      text: q.text,
+      options: [...q.options],
+      correctOptionIndex: q.correctOptionIndex,
+      codeSnippet: q.codeSnippet || '',
+      codeLanguage: q.codeLanguage || 'cpp',
+      explanation: q.explanation || ''
+    }));
+
+    const isFirstEmpty = questions.length === 1 && !questions[0].text?.trim();
+    if (isFirstEmpty) {
+      setQuestions(newQuestions);
+      if (!title) setTitle(preset.title);
+      if (!description) setDescription(preset.description);
+    } else {
+      setQuestions(prev => [...prev, ...newQuestions]);
+    }
+
+    setShowTifBank(false);
+    Swal.fire({
+      title: 'Bank Soal TIF Dimuat!',
+      text: `${newQuestions.length} soal dari "${preset.title}" berhasil ditambahkan.`,
+      icon: 'success',
+      confirmButtonColor: '#3b82f6'
+    });
+  };
 
   // Sensors for DnD
   const sensors = useSensors(
@@ -655,7 +744,10 @@ export default function QuizCreatePage() {
         questions: questions.map(q => ({
           text: q.text || '',
           options: q.options || ['', '', '', ''],
-          correctOptionIndex: q.correctOptionIndex || 0
+          correctOptionIndex: q.correctOptionIndex || 0,
+          codeSnippet: q.codeSnippet || '',
+          codeLanguage: q.codeLanguage || '',
+          explanation: q.explanation || ''
         })),
         createdAt: new Date().toISOString()
       };
@@ -846,6 +938,9 @@ export default function QuizCreatePage() {
           text: q.text,
           options: q.options,
           correctOptionIndex: q.correctOptionIndex,
+          codeSnippet: q.codeSnippet || '',
+          codeLanguage: q.codeLanguage || '',
+          explanation: q.explanation || '',
           quizId
         });
       }
@@ -938,9 +1033,43 @@ export default function QuizCreatePage() {
             </div>
 
             <div className="space-y-3">
-              <div className="flex items-center gap-2">
-                <Calendar className="w-3.5 h-3.5 text-blue-600" />
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{t('quiz.availability')}</label>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <Calendar className="w-3.5 h-3.5 text-blue-600" />
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{t('quiz.availability')}</label>
+                </div>
+                {/* Preset Jadwal Cepat */}
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="text-[9px] font-black uppercase text-slate-400 mr-1">Preset:</span>
+                  <button
+                    type="button"
+                    onClick={() => setQuickSchedule('always')}
+                    className="px-2.5 py-1 text-[9px] font-black rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition-all uppercase"
+                  >
+                    Selalu Buka
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setQuickSchedule('2hours')}
+                    className="px-2.5 py-1 text-[9px] font-black rounded-lg bg-blue-50 hover:bg-blue-100 dark:bg-blue-900/30 dark:hover:bg-blue-900/50 text-blue-600 dark:text-blue-400 transition-all uppercase"
+                  >
+                    2 Jam Kuliah
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setQuickSchedule('today')}
+                    className="px-2.5 py-1 text-[9px] font-black rounded-lg bg-purple-50 hover:bg-purple-100 dark:bg-purple-900/30 dark:hover:bg-purple-900/50 text-purple-600 dark:text-purple-400 transition-all uppercase"
+                  >
+                    Hari Ini (23:59)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setQuickSchedule('24hours')}
+                    className="px-2.5 py-1 text-[9px] font-black rounded-lg bg-amber-50 hover:bg-amber-100 dark:bg-amber-900/30 dark:hover:bg-amber-900/50 text-amber-600 dark:text-amber-400 transition-all uppercase"
+                  >
+                    24 Jam
+                  </button>
+                </div>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="relative group">
@@ -968,7 +1097,7 @@ export default function QuizCreatePage() {
                   <span className="absolute -top-2 left-6 px-2 bg-white dark:bg-slate-900 text-[8px] font-black uppercase text-slate-400">{t('quiz.endTime')}</span>
                 </div>
               </div>
-              <p className="text-[10px] text-slate-400 font-medium px-1">Configure specific temporal bounds for assessment accessibility (Optional).</p>
+              <p className="text-[10px] text-slate-400 font-medium px-1">Atur jadwal mulai dan batas akhir kuis. Kosongkan jika kuis dapat dikerjakan kapan saja.</p>
             </div>
           </div>
         </div>
@@ -980,8 +1109,17 @@ export default function QuizCreatePage() {
             <div className="flex flex-wrap items-center gap-3">
               <button
                 type="button"
+                onClick={() => setShowTifBank(true)}
+                className="inline-flex items-center px-5 py-3 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/50 font-black rounded-2xl hover:bg-emerald-600 hover:text-white transition-all shadow-sm hover:shadow-lg active:scale-95 uppercase tracking-widest text-xs"
+                title="Muat Bank Soal Khusus Teknik Informatika (C++, Java, SQL, Python)"
+              >
+                <Code2 className="w-4 h-4 mr-2" />
+                Bank Soal TIF
+              </button>
+              <button
+                type="button"
                 onClick={() => setShowAiPanel(!showAiPanel)}
-                className="inline-flex items-center px-6 py-3 bg-indigo-50 text-indigo-600 dark:bg-indigo-900/40 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800/50 font-black rounded-2xl hover:bg-indigo-600 hover:text-white transition-all shadow-sm hover:shadow-lg active:scale-95 uppercase tracking-widest text-xs"
+                className="inline-flex items-center px-5 py-3 bg-indigo-50 text-indigo-600 dark:bg-indigo-900/40 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800/50 font-black rounded-2xl hover:bg-indigo-600 hover:text-white transition-all shadow-sm hover:shadow-lg active:scale-95 uppercase tracking-widest text-xs"
               >
                 <Sparkles className="w-4 h-4 mr-2 text-indigo-500 animate-pulse" />
                 Gemini AI Builder
@@ -989,10 +1127,10 @@ export default function QuizCreatePage() {
               <button
                 type="button"
                 onClick={addQuestion}
-                className="inline-flex items-center px-6 py-3 bg-blue-50 text-blue-600 dark:bg-blue-900/40 dark:text-blue-400 border border-blue-200 dark:border-blue-800/40 font-black rounded-2xl hover:bg-blue-600 hover:text-white transition-all shadow-sm hover:shadow-lg active:scale-95 uppercase tracking-widest text-xs"
+                className="inline-flex items-center px-5 py-3 bg-blue-50 text-blue-600 dark:bg-blue-900/40 dark:text-blue-400 border border-blue-200 dark:border-blue-800/40 font-black rounded-2xl hover:bg-blue-600 hover:text-white transition-all shadow-sm hover:shadow-lg active:scale-95 uppercase tracking-widest text-xs"
               >
                 <Plus className="w-4 h-4 mr-2" />
-                Append Node
+                Tambah Soal
               </button>
             </div>
           </div>
@@ -1037,9 +1175,22 @@ export default function QuizCreatePage() {
                         type="text"
                         value={aiTopic}
                         onChange={(e) => setAiTopic(e.target.value)}
-                        placeholder="Contoh: Pemrograman React & State Management, SQL Joins, dll..."
-                        className="w-full px-5 py-3.5 rounded-xl bg-slate-900/60 border border-slate-700/50 focus:border-indigo-500 focus:bg-slate-900 outline-none transition-all text-white font-bold text-sm placeholder:text-slate-550"
+                        placeholder="Contoh: Pemrograman C++, Query SQL, Struktur Data, dll..."
+                        className="w-full px-5 py-3.5 rounded-xl bg-slate-900/60 border border-slate-700/50 focus:border-indigo-500 focus:bg-slate-900 outline-none transition-all text-white font-bold text-sm placeholder:text-slate-500"
                       />
+                      <div className="flex flex-wrap gap-1.5 pt-1">
+                        <span className="text-[9px] text-slate-400 font-bold uppercase mr-1">Rekomendasi TIF:</span>
+                        {['Algoritma C++', 'Query SQL Relasional', 'OOP Java / Python', 'Jaringan Komputer', 'Frontend React & JS'].map((tChip) => (
+                          <button
+                            key={tChip}
+                            type="button"
+                            onClick={() => setAiTopic(tChip)}
+                            className="px-2 py-0.5 rounded-md bg-indigo-900/40 hover:bg-indigo-800/60 text-indigo-300 text-[9px] font-bold border border-indigo-700/40 transition-colors"
+                          >
+                            + {tChip}
+                          </button>
+                        ))}
+                      </div>
                     </div>
 
                     <div className="grid grid-cols-2 gap-4">
@@ -1361,6 +1512,84 @@ export default function QuizCreatePage() {
     </form>
 
       <AnimatePresence>
+        {/* Modal Bank Soal Teknik Informatika */}
+        {showTifBank && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowTifBank(false)}
+              className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+            />
+            <motion.div 
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="w-full max-w-3xl bg-white dark:bg-slate-900 rounded-[2.5rem] shadow-2xl relative overflow-hidden flex flex-col max-h-[85vh] border border-slate-200 dark:border-slate-800"
+            >
+              <div className="p-8 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50/50 dark:bg-slate-800/50">
+                <div className="flex items-center gap-3">
+                  <div className="p-3 bg-emerald-500/10 text-emerald-600 rounded-2xl border border-emerald-500/20">
+                    <Code2 className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h2 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white uppercase tracking-tight">Bank Soal Teknik Informatika</h2>
+                    <p className="text-slate-500 dark:text-slate-400 text-xs font-medium">Pilih preset bank soal kurikulum TIF dengan potongan kode program siap pakai.</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => setShowTifBank(false)}
+                  className="p-3 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-2xl text-slate-400 transition-colors"
+                >
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+
+              <div className="p-6 sm:p-8 overflow-y-auto space-y-4">
+                {TIF_QUESTION_BANKS.map((preset) => (
+                  <div
+                    key={preset.id}
+                    className="p-6 bg-slate-50 dark:bg-slate-800/50 rounded-3xl border border-slate-200 dark:border-slate-800 hover:border-emerald-500 transition-all space-y-4"
+                  >
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div>
+                        <div className="flex items-center gap-2 mb-1.5">
+                          <span className="px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300">
+                            {preset.badge}
+                          </span>
+                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                            {preset.category}
+                          </span>
+                        </div>
+                        <h4 className="text-base sm:text-lg font-black text-slate-900 dark:text-white">{preset.title}</h4>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{preset.description}</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => loadTifBankPreset(preset)}
+                        className="px-5 py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs uppercase tracking-wider shadow-lg shadow-emerald-500/20 active:scale-95 transition-all shrink-0"
+                      >
+                        Gunakan Bank Soal Ini ({preset.questions.length} Soal)
+                      </button>
+                    </div>
+
+                    {/* Preview first question snippet */}
+                    {preset.questions[0]?.codeSnippet && (
+                      <div className="pt-2">
+                        <span className="text-[9px] font-black uppercase text-slate-400 tracking-wider block mb-1">Contoh Cuplikan Soal:</span>
+                        <div className="p-3 bg-slate-950 rounded-xl text-emerald-300 font-mono text-[11px] overflow-x-auto max-h-24">
+                          <pre>{preset.questions[0].codeSnippet}</pre>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </motion.div>
+          </div>
+        )}
+        {/* Modal Template Blueprints */}
         {showTemplates && (
           <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
             <motion.div 
@@ -1379,7 +1608,7 @@ export default function QuizCreatePage() {
               <div className="p-8 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50/50 dark:bg-slate-800/50">
                 <div>
                   <h2 className="text-2xl font-black text-slate-900 dark:text-white uppercase tracking-tight">Quiz Blueprints</h2>
-                  <p className="text-slate-500 dark:text-slate-400 text-sm font-medium">Select a structural template to pre-fill the registry.</p>
+                  <p className="text-slate-500 dark:text-slate-400 text-sm font-medium">Pilih template struktur kuis tersimpan.</p>
                 </div>
                 <button 
                   onClick={() => setShowTemplates(false)}
@@ -1393,7 +1622,7 @@ export default function QuizCreatePage() {
                 {templates.length === 0 ? (
                   <div className="py-20 text-center space-y-4">
                     <Layout className="w-12 h-12 text-slate-200 mx-auto" />
-                    <p className="text-slate-400 font-bold uppercase tracking-widest text-xs">No blueprints configured yet.</p>
+                    <p className="text-slate-400 font-bold uppercase tracking-widest text-xs">Belum ada blueprint tersimpan.</p>
                   </div>
                 ) : (
                   templates.map(template => (
@@ -1407,10 +1636,10 @@ export default function QuizCreatePage() {
                         <p className="text-slate-500 dark:text-slate-400 text-sm font-medium line-clamp-1">{template.title}</p>
                         <div className="flex items-center gap-4 mt-2">
                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest bg-white dark:bg-slate-900 px-3 py-1 rounded-full border border-slate-100 dark:border-slate-700">
-                             {template.questions.length} Nodes
+                             {template.questions.length} Soal
                            </span>
                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest bg-white dark:bg-slate-900 px-3 py-1 rounded-full border border-slate-100 dark:border-slate-700">
-                             {template.timeLimit} Min
+                             {template.timeLimit} Menit
                            </span>
                         </div>
                       </div>
@@ -1461,6 +1690,9 @@ function SortableQuestion({
     isDragging
   } = useSortable({ id: q.tempId });
 
+  const [showCode, setShowCode] = useState(!!q.codeSnippet);
+  const [showExplanation, setShowExplanation] = useState(!!q.explanation);
+
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
@@ -1497,22 +1729,111 @@ function SortableQuestion({
         <GripVertical className="w-5 h-5 sm:w-6 sm:h-6" />
       </div>
 
-      <div className="flex items-start gap-4 sm:space-x-6 mb-8 sm:mb-10 mt-6 sm:mt-0">
+      <div className="flex items-start gap-4 sm:space-x-6 mb-6 mt-6 sm:mt-0">
         <span className="w-8 h-8 sm:w-10 sm:h-10 shrink-0 rounded-lg sm:rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center font-black text-slate-400 text-xs sm:text-sm">
           {qIndex + 1 < 10 ? `0${qIndex + 1}` : qIndex + 1}
         </span>
-        <div className="flex-grow">
-          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1 mb-2 block">Question Content</label>
+        <div className="flex-grow space-y-3">
+          <div className="flex items-center justify-between">
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1 block">Teks Soal</label>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  const next = !showCode;
+                  setShowCode(next);
+                  if (!next) {
+                    updateQuestion(qIndex, 'codeSnippet', '');
+                  } else if (!q.codeLanguage) {
+                    updateQuestion(qIndex, 'codeLanguage', 'cpp');
+                  }
+                }}
+                className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all ${
+                  showCode 
+                    ? 'bg-emerald-600 text-white shadow-md shadow-emerald-500/20' 
+                    : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200'
+                }`}
+              >
+                <Code2 className="w-3.5 h-3.5" />
+                <span>{showCode ? 'Snippet Kode Aktif' : '+ Kode Program (TIF)'}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowExplanation(!showExplanation)}
+                className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all ${
+                  showExplanation 
+                    ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20' 
+                    : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200'
+                }`}
+              >
+                <span>💡 {showExplanation ? 'Pembahasan Aktif' : '+ Pembahasan'}</span>
+              </button>
+            </div>
+          </div>
           <input
             type="text"
-            value={q.text}
+            value={q.text || ''}
             onChange={(e) => updateQuestion(qIndex, 'text', e.target.value)}
-            placeholder="Specify the inquiry parameter..."
-            className="w-full text-lg sm:text-xl font-bold bg-transparent border-b-2 border-slate-100 dark:border-slate-800 focus:border-blue-600 outline-none pb-2 transition-colors dark:text-white placeholder:text-slate-200"
+            placeholder="Tuliskan pertanyaan kuis di sini (misal: Apakah output dari program C++ berikut?)..."
+            className="w-full text-lg sm:text-xl font-bold bg-transparent border-b-2 border-slate-100 dark:border-slate-800 focus:border-blue-600 outline-none pb-2 transition-colors dark:text-white placeholder:text-slate-300"
           />
         </div>
       </div>
 
+      {/* Code Snippet Editor for TIF */}
+      {showCode && (
+        <div className="mb-6 p-4 sm:p-6 bg-slate-950 rounded-2xl border border-slate-800 space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-black text-emerald-400 uppercase tracking-widest flex items-center gap-1.5 font-mono">
+              <Code2 className="w-3.5 h-3.5" />
+              Editor Potongan Kode Program (Syntax Highlighting)
+            </span>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-bold text-slate-400 uppercase">Bahasa:</span>
+              <select
+                value={q.codeLanguage || 'cpp'}
+                onChange={(e) => updateQuestion(qIndex, 'codeLanguage', e.target.value)}
+                className="px-3 py-1 rounded-lg bg-slate-900 border border-slate-700 text-emerald-400 text-xs font-mono font-bold outline-none"
+              >
+                <option value="cpp">C++</option>
+                <option value="java">Java</option>
+                <option value="python">Python</option>
+                <option value="sql">SQL (Database)</option>
+                <option value="javascript">JavaScript</option>
+                <option value="php">PHP</option>
+                <option value="csharp">C#</option>
+                <option value="html">HTML / CSS</option>
+              </select>
+            </div>
+          </div>
+          <textarea
+            value={q.codeSnippet || ''}
+            onChange={(e) => updateQuestion(qIndex, 'codeSnippet', e.target.value)}
+            rows={5}
+            placeholder={`// Tuliskan potongan kode program di sini\n#include <iostream>\nusing namespace std;\nint main() {\n    return 0;\n}`}
+            className="w-full p-4 rounded-xl bg-slate-900 border border-slate-800 text-emerald-300 font-mono text-xs sm:text-sm leading-relaxed outline-none focus:border-emerald-500 transition-colors placeholder:text-slate-600 resize-y"
+          />
+        </div>
+      )}
+
+      {/* Explanation Field */}
+      {showExplanation && (
+        <div className="mb-6 p-4 rounded-2xl bg-blue-50/60 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900/30 space-y-1.5">
+          <label className="text-[10px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-widest block">
+            💡 Pembahasan Soal / Kunci Penjelasan (Opsional, Ditampilkan saat Mahasiswa Review)
+          </label>
+          <input
+            type="text"
+            value={q.explanation || ''}
+            onChange={(e) => updateQuestion(qIndex, 'explanation', e.target.value)}
+            placeholder="Jelaskan alasan jawaban yang benar (misal: Karena loop berjalan dari i=0 sampai n-1)..."
+            className="w-full px-4 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-blue-200 dark:border-blue-900/50 text-slate-800 dark:text-slate-200 text-xs font-medium outline-none"
+          />
+        </div>
+      )}
+
+      {/* Options Inputs */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
         {['A', 'B', 'C', 'D'].map((label, oIndex) => (
           <div key={label} className="relative">
@@ -1525,6 +1846,7 @@ function SortableQuestion({
                     ? 'bg-blue-600 text-white shadow-xl shadow-blue-200'
                     : 'bg-slate-50 dark:bg-slate-800 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-100 dark:border-slate-700'
                 }`}
+                title={`Pilih Opsi ${label} sebagai jawaban benar`}
               >
                 {q.correctOptionIndex === oIndex ? (
                   <motion.div
@@ -1541,18 +1863,18 @@ function SortableQuestion({
               </button>
               <input
                 type="text"
-                value={q.options?.[oIndex]}
+                value={q.options?.[oIndex] || ''}
                 onChange={(e) => updateOption(qIndex, oIndex, e.target.value)}
-                placeholder={`Option Path ${label}`}
-                className="flex-grow px-4 sm:px-5 py-3 sm:py-4 rounded-xl sm:rounded-2xl bg-white dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 focus:border-blue-600 outline-none transition-all dark:text-white font-bold placeholder:text-slate-200 text-sm sm:text-base"
+                placeholder={`Opsi Jawaban ${label}`}
+                className="flex-grow px-4 sm:px-5 py-3 sm:py-4 rounded-xl sm:rounded-2xl bg-white dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 focus:border-blue-600 outline-none transition-all dark:text-white font-bold placeholder:text-slate-300 text-sm sm:text-base"
               />
             </div>
           </div>
         ))}
       </div>
-      <div className="mt-8 flex items-center text-[10px] font-black text-slate-300 uppercase tracking-widest px-1">
-        <Info className="w-3.5 h-3.5 mr-2" />
-        Select indices A-D to designate the definitive response path.
+      <div className="mt-6 flex items-center text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">
+        <Info className="w-3.5 h-3.5 mr-2 text-blue-500" />
+        Klik tombol huruf A, B, C, atau D untuk menentukan kunci jawaban yang benar.
       </div>
     </div>
   );

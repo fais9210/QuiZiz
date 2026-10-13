@@ -3,8 +3,11 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { Quiz, Result } from '../types';
-import { ArrowLeft, Trophy, Medal, Info } from 'lucide-react';
+import { ArrowLeft, Trophy, Medal, Info, Download, FileSpreadsheet } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import * as XLSX from 'xlsx';
+import { format } from 'date-fns';
+import Swal from 'sweetalert2';
 import Leaderboard from '../components/Leaderboard';
 import { motion } from 'motion/react';
 
@@ -35,6 +38,8 @@ export default function QuizLeaderboardPage() {
         const resSnap = await getDocs(resQuery);
         const resList: Result[] = [];
         resSnap.forEach(d => resList.push({ id: d.id, ...d.data() } as Result));
+        // Sort by score desc, then time spent asc
+        resList.sort((a, b) => b.score - a.score || (a.timeSpentSeconds || 0) - (b.timeSpentSeconds || 0));
         setResults(resList);
       } catch (err) {
         console.error(err);
@@ -46,6 +51,69 @@ export default function QuizLeaderboardPage() {
     fetchData();
   }, [id]);
 
+  const handleExportExcel = () => {
+    if (results.length === 0) {
+      Swal.fire({
+        title: 'Tidak Ada Data',
+        text: 'Belum ada data nilai leaderboard untuk diekspor.',
+        icon: 'info',
+        confirmButtonColor: '#3b82f6'
+      });
+      return;
+    }
+
+    const exportRows = results.map((r, index) => ({
+      'Peringkat': index + 1,
+      'Nama Mahasiswa': r.studentName,
+      'Nilai (%)': r.score,
+      'Status': r.score >= 70 ? 'LULUS' : 'REMEDIAL',
+      'Jawaban Benar': r.correctCount,
+      'Total Soal': r.totalQuestions,
+      'Durasi': `${Math.floor((r.timeSpentSeconds || 0) / 60)}m ${(r.timeSpentSeconds || 0) % 60}s`,
+      'Waktu Selesai': format(new Date(r.completedAt), 'dd/MM/yyyy HH:mm:ss')
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(exportRows);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Leaderboard');
+
+    const fileName = `Leaderboard_${(quiz?.title || 'Quiz').replace(/[^a-zA-Z0-9]/g, '_')}.xlsx`;
+    XLSX.writeFile(workbook, fileName);
+  };
+
+  const handleExportCSV = () => {
+    if (results.length === 0) {
+      Swal.fire({
+        title: 'Tidak Ada Data',
+        text: 'Belum ada data nilai leaderboard untuk diekspor.',
+        icon: 'info',
+        confirmButtonColor: '#3b82f6'
+      });
+      return;
+    }
+
+    const exportRows = results.map((r, index) => ({
+      'Peringkat': index + 1,
+      'Nama Mahasiswa': r.studentName,
+      'Nilai (%)': r.score,
+      'Status': r.score >= 70 ? 'LULUS' : 'REMEDIAL',
+      'Jawaban Benar': r.correctCount,
+      'Total Soal': r.totalQuestions,
+      'Durasi': `${Math.floor((r.timeSpentSeconds || 0) / 60)}m ${(r.timeSpentSeconds || 0) % 60}s`,
+      'Waktu Selesai': format(new Date(r.completedAt), 'dd/MM/yyyy HH:mm:ss')
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(exportRows);
+    const csvContent = XLSX.utils.sheet_to_csv(worksheet);
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Leaderboard_${(quiz?.title || 'Quiz').replace(/[^a-zA-Z0-9]/g, '_')}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   if (loading) return (
     <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-4">
       <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-600"></div>
@@ -55,20 +123,42 @@ export default function QuizLeaderboardPage() {
 
   return (
     <div className="max-w-4xl mx-auto space-y-10 pb-20">
-      <header className="flex flex-col sm:flex-row items-center gap-6">
-        <button onClick={() => navigate(-1)} className="p-3 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 text-slate-400 hover:text-slate-900 dark:hover:text-white transition-all shadow-sm hover:shadow-md active:scale-95">
-          <ArrowLeft className="w-6 h-6" />
-        </button>
-        <div className="text-center sm:text-left flex-1">
-          <div className="flex items-center justify-center sm:justify-start gap-3 mb-2">
-            <Medal className="w-6 h-6 text-yellow-500" />
-            <h1 className="text-3xl sm:text-4xl font-black text-slate-900 dark:text-white uppercase tracking-tight leading-none">
-              {t('leaderboard.title')}
-            </h1>
+      <header className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
+        <div className="flex items-center gap-6">
+          <button onClick={() => navigate(-1)} className="p-3 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 text-slate-400 hover:text-slate-900 dark:hover:text-white transition-all shadow-sm hover:shadow-md active:scale-95">
+            <ArrowLeft className="w-6 h-6" />
+          </button>
+          <div className="text-left flex-1">
+            <div className="flex items-center gap-3 mb-2">
+              <Medal className="w-6 h-6 text-yellow-500" />
+              <h1 className="text-3xl sm:text-4xl font-black text-slate-900 dark:text-white uppercase tracking-tight leading-none">
+                {t('leaderboard.title')}
+              </h1>
+            </div>
+            <p className="text-slate-500 dark:text-slate-400 font-medium uppercase text-xs tracking-widest px-1">
+              {quiz?.title} — Global Ranking Stream
+            </p>
           </div>
-          <p className="text-slate-500 dark:text-slate-400 font-medium uppercase text-xs tracking-widest px-1">
-            {quiz?.title} — Global Ranking Stream
-          </p>
+        </div>
+
+        {/* Action Controls */}
+        <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
+          <button
+            onClick={handleExportExcel}
+            className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs uppercase tracking-wider shadow-lg shadow-emerald-500/20 active:scale-95 transition-all"
+            title="Download Excel (.xlsx)"
+          >
+            <FileSpreadsheet className="w-4 h-4" />
+            <span>Export Excel</span>
+          </button>
+          <button
+            onClick={handleExportCSV}
+            className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 font-black text-xs uppercase tracking-wider shadow-sm active:scale-95 transition-all"
+            title="Download CSV"
+          >
+            <Download className="w-4 h-4" />
+            <span>Export CSV</span>
+          </button>
         </div>
       </header>
 

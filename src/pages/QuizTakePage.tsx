@@ -9,6 +9,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import Swal from 'sweetalert2';
 import { formatTime } from '../lib/utils';
 import { useTranslation } from 'react-i18next';
+import CodeRenderer, { isCodeLike } from '../components/CodeRenderer';
 
 export default function QuizTakePage() {
   const { id } = useParams();
@@ -289,13 +290,20 @@ export default function QuizTakePage() {
                     {isCorrect ? 'Correct' : 'Incorrect'}
                   </div>
                   
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-4">Question {idx + 1}</p>
-                  <h4 className="text-xl font-bold text-slate-900 dark:text-white mb-8">{q.text}</h4>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">Question {idx + 1}</p>
+                  <div className="text-lg font-bold text-slate-900 dark:text-white mb-6">
+                    <CodeRenderer 
+                      text={q.text} 
+                      codeSnippet={q.codeSnippet}
+                      codeLanguage={q.codeLanguage}
+                    />
+                  </div>
                   
                   <div className="space-y-3">
                     {q.options.map((option, optIdx) => {
                       const isSelected = studentAnswer === optIdx;
                       const isCorrectOption = q.correctOptionIndex === optIdx;
+                      const isCode = isCodeLike(option);
                       
                       let appearance = "border-slate-100 dark:border-slate-800 opacity-60";
                       if (isCorrectOption) appearance = "border-emerald-500 bg-emerald-50/30 dark:bg-emerald-900/10 ring-2 ring-emerald-500/20 opacity-100";
@@ -311,8 +319,14 @@ export default function QuizTakePage() {
                             {isCorrectOption ? <Check className="w-4 h-4 text-white" /> : 
                              (isSelected && !isCorrectOption) ? <X className="w-4 h-4 text-white" /> : null}
                           </div>
-                          <span className={`text-base font-medium ${isCorrectOption ? 'text-emerald-700 dark:text-emerald-400' : isSelected ? 'text-red-700 dark:text-red-400' : 'text-slate-500'}`}>
-                            {option}
+                          <span className={`text-base font-medium ${isCode ? 'font-mono text-sm sm:text-base' : ''} ${isCorrectOption ? 'text-emerald-700 dark:text-emerald-400' : isSelected ? 'text-red-700 dark:text-red-400' : 'text-slate-500'}`}>
+                            {isCode ? (
+                              <code className="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-blue-600 dark:text-blue-400">
+                                {option}
+                              </code>
+                            ) : (
+                              option
+                            )}
                           </span>
                         </div>
                       );
@@ -324,8 +338,15 @@ export default function QuizTakePage() {
                       <AlertCircle className="w-5 h-5 text-blue-600 mr-3 mt-0.5" />
                       <div>
                         <p className="text-sm font-bold text-blue-900 dark:text-blue-300">Explanation</p>
-                        <p className="text-sm text-blue-700 dark:text-blue-400">The correct answer was <span className="font-bold underline">{q.options[q.correctOptionIndex]}</span>.</p>
+                        <p className="text-sm text-blue-700 dark:text-blue-400">The correct answer was <span className="font-bold underline font-mono">{q.options[q.correctOptionIndex]}</span>.</p>
                       </div>
+                    </div>
+                  )}
+
+                  {q.explanation && (
+                    <div className="mt-4 p-4 rounded-2xl bg-indigo-50/50 dark:bg-indigo-900/10 border border-indigo-100 dark:border-indigo-900/30 text-xs text-indigo-900 dark:text-indigo-200">
+                      <span className="font-bold uppercase tracking-wider block mb-1">💡 Pembahasan / Solusi:</span>
+                      {q.explanation}
                     </div>
                   )}
                 </div>
@@ -355,25 +376,60 @@ export default function QuizTakePage() {
 
   if (status !== 'available' && !showResults) {
     return (
-      <div className="max-w-md mx-auto mt-20 p-8 bg-white dark:bg-slate-900 rounded-[2.5rem] border border-slate-200 dark:border-slate-800 shadow-2xl text-center">
-        <div className={`w-20 h-20 rounded-3xl flex items-center justify-center mx-auto mb-8 ${status === 'not-started' ? 'bg-blue-50 text-blue-600' : 'bg-red-50 text-red-600'}`}>
+      <div className="max-w-lg mx-auto mt-16 p-8 sm:p-10 bg-white dark:bg-slate-900 rounded-[2.5rem] border border-slate-200 dark:border-slate-800 shadow-2xl text-center space-y-6">
+        <div className={`w-20 h-20 rounded-3xl flex items-center justify-center mx-auto ${status === 'not-started' ? 'bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400' : 'bg-rose-50 text-rose-600 dark:bg-rose-900/30 dark:text-rose-400'}`}>
           {status === 'not-started' ? <Calendar className="w-10 h-10" /> : <Clock className="w-10 h-10" />}
         </div>
-        <h2 className="text-2xl font-black text-slate-900 dark:text-white uppercase tracking-tight mb-4">
-          {status === 'not-started' ? t('quiz.notStarted') : t('quiz.ended')}
-        </h2>
-        <p className="text-slate-500 dark:text-slate-400 font-medium leading-relaxed mb-8">
-          {status === 'not-started' 
-            ? `${t('quiz.notStartedDesc')} ${new Date(quiz?.startDate!).toLocaleString()}.`
-            : `${t('quiz.endedDesc')} ${new Date(quiz?.endDate!).toLocaleString()}.`
-          }
-        </p>
-        <button
-          onClick={() => navigate('/dashboard')}
-          className="w-full py-4 bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white font-black rounded-2xl hover:bg-slate-200 transition-all uppercase tracking-widest text-xs"
-        >
-          Back to Safety
-        </button>
+        
+        <div>
+          <span className={`inline-block px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest mb-3 ${status === 'not-started' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300' : 'bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300'}`}>
+            {status === 'not-started' ? 'Kuis Belum Dibuka' : 'Waktu Kuis Telah Berakhir'}
+          </span>
+          <h2 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white uppercase tracking-tight">
+            {quiz?.title}
+          </h2>
+        </div>
+
+        <div className="p-5 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 text-left space-y-2">
+          {status === 'not-started' ? (
+            <>
+              <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Jadwal Akses Kuis:</p>
+              <p className="text-sm font-black text-blue-600 dark:text-blue-400">
+                Dibuka: {quiz?.startDate ? new Date(quiz.startDate).toLocaleString('id-ID', { dateStyle: 'full', timeStyle: 'short' }) : '-'}
+              </p>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">
+                Halaman ini akan otomatis dapat diakses setelah jam buka kuis tiba. Silakan tunggu beberapa saat atau klik tombol Refresh.
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Batas Waktu Ditutup:</p>
+              <p className="text-sm font-black text-rose-600 dark:text-rose-400">
+                Berakhir: {quiz?.endDate ? new Date(quiz.endDate).toLocaleString('id-ID', { dateStyle: 'full', timeStyle: 'short' }) : '-'}
+              </p>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">
+                Batas pengumpulan kuis ini sudah terlewati. Jika Anda memiliki kendala teknis, silakan hubungi Bapak/Ibu Dosen pengampu.
+              </p>
+            </>
+          )}
+        </div>
+
+        <div className="flex flex-col sm:flex-row gap-3 pt-2">
+          {status === 'not-started' && (
+            <button
+              onClick={() => window.location.reload()}
+              className="flex-1 py-4 bg-blue-600 text-white font-black rounded-2xl hover:bg-blue-700 transition-all uppercase tracking-widest text-xs shadow-lg shadow-blue-500/20 active:scale-95"
+            >
+              Muat Ulang (Refresh)
+            </button>
+          )}
+          <button
+            onClick={() => user ? navigate('/dashboard') : navigate('/')}
+            className="flex-1 py-4 bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 font-black rounded-2xl hover:bg-slate-200 dark:hover:bg-slate-700 transition-all uppercase tracking-widest text-xs active:scale-95"
+          >
+            Kembali
+          </button>
+        </div>
       </div>
     );
   }
@@ -451,47 +507,62 @@ export default function QuizTakePage() {
           exit={{ opacity: 0, scale: 1.02 }}
           className="bg-white dark:bg-slate-900 px-10 py-12 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-xl"
         >
-          <div className="mb-10">
+          <div className="mb-8">
             <span className="px-3 py-1 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-full text-[10px] font-black text-slate-500 uppercase mb-4 inline-block tracking-widest">
               Question {currentIndex + 1 < 10 ? `0${currentIndex + 1}` : currentIndex + 1} of {questions.length}
             </span>
-            <h2 className="text-2xl md:text-3xl font-black text-slate-900 dark:text-white leading-tight">
-              {currentQuestion.text}
-            </h2>
+            <div className="text-xl sm:text-2xl md:text-3xl font-black text-slate-900 dark:text-white leading-tight">
+              <CodeRenderer 
+                text={currentQuestion.text}
+                codeSnippet={currentQuestion.codeSnippet}
+                codeLanguage={currentQuestion.codeLanguage}
+              />
+            </div>
           </div>
 
           <div className="space-y-3">
-            {currentQuestion.options.map((option, idx) => (
-              <button
-                key={idx}
-                onClick={() => handleSelect(idx)}
-                className={`w-full flex items-center px-6 py-5 rounded-2xl border-2 transition-all text-left group ${
-                  answers[currentIndex] === idx
-                    ? 'border-blue-500 bg-white ring-4 ring-blue-50 dark:ring-blue-900/10'
-                    : 'border-slate-100 dark:border-slate-800 hover:border-blue-200 dark:hover:border-blue-900/40 bg-white dark:bg-slate-900/50'
-                }`}
-              >
-                <div className={`w-6 h-6 rounded-full border-2 mr-4 flex items-center justify-center transition-colors ${
-                   answers[currentIndex] === idx
-                   ? 'border-blue-600 bg-blue-600'
-                   : 'border-slate-300 dark:border-slate-600'
-                }`}>
-                  {answers[currentIndex] === idx && <div className="w-2 h-2 bg-white rounded-full" />}
-                </div>
-                <span className={`text-lg transition-colors ${
-                   answers[currentIndex] === idx
-                   ? 'text-slate-900 dark:text-white font-bold'
-                   : 'text-slate-600 dark:text-slate-400 font-medium'
-                }`}>
-                  {option}
-                </span>
-                {answers[currentIndex] === idx && (
-                   <div className="ml-auto text-blue-600">
-                     <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20"><path d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" /></svg>
-                   </div>
-                )}
-              </button>
-            ))}
+            {currentQuestion.options.map((option, idx) => {
+              const isCode = isCodeLike(option);
+              return (
+                <button
+                  key={idx}
+                  onClick={() => handleSelect(idx)}
+                  className={`w-full flex items-center px-6 py-5 rounded-2xl border-2 transition-all text-left group ${
+                    answers[currentIndex] === idx
+                      ? 'border-blue-500 bg-white ring-4 ring-blue-50 dark:ring-blue-900/10'
+                      : 'border-slate-100 dark:border-slate-800 hover:border-blue-200 dark:hover:border-blue-900/40 bg-white dark:bg-slate-900/50'
+                  }`}
+                >
+                  <div className={`w-6 h-6 rounded-full border-2 mr-4 flex items-center justify-center transition-colors shrink-0 ${
+                     answers[currentIndex] === idx
+                     ? 'border-blue-600 bg-blue-600'
+                     : 'border-slate-300 dark:border-slate-600'
+                  }`}>
+                    {answers[currentIndex] === idx && <div className="w-2 h-2 bg-white rounded-full" />}
+                  </div>
+                  <span className={`text-base sm:text-lg transition-colors ${
+                     isCode ? 'font-mono text-sm sm:text-base' : ''
+                  } ${
+                     answers[currentIndex] === idx
+                     ? 'text-slate-900 dark:text-white font-bold'
+                     : 'text-slate-600 dark:text-slate-400 font-medium'
+                  }`}>
+                    {isCode ? (
+                      <code className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-blue-600 dark:text-blue-400 border border-slate-200 dark:border-slate-700 font-mono text-xs sm:text-sm font-bold inline-block">
+                        {option}
+                      </code>
+                    ) : (
+                      option
+                    )}
+                  </span>
+                  {answers[currentIndex] === idx && (
+                     <div className="ml-auto text-blue-600 shrink-0 pl-2">
+                       <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20"><path d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" /></svg>
+                     </div>
+                  )}
+                </button>
+              );
+            })}
           </div>
         </motion.div>
       </AnimatePresence>

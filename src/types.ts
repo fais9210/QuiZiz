@@ -32,6 +32,9 @@ export interface Question {
   text: string;
   options: string[]; // Exactly 4 options
   correctOptionIndex: number; // 0, 1, 2, 3
+  codeSnippet?: string; // Optional code block for programming questions
+  codeLanguage?: string; // Optional language: cpp, java, python, sql, javascript, php
+  explanation?: string; // Optional explanation / discussion of the solution
 }
 
 export interface Result {

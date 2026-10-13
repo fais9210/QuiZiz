@@ -29,9 +29,10 @@ import {
   Area,
   Line
 } from 'recharts';
-import { ArrowLeft, Users, Trophy, TrendingUp, User, Trash2, Clock, Activity, CheckCircle, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, Users, Trophy, TrendingUp, User, Trash2, Clock, Activity, CheckCircle, AlertTriangle, Download, FileSpreadsheet } from 'lucide-react';
 import { format } from 'date-fns';
 import Swal from 'sweetalert2';
+import * as XLSX from 'xlsx';
 import Leaderboard from '../components/Leaderboard';
 import { useTranslation } from 'react-i18next';
 
@@ -150,15 +151,108 @@ export default function QuizAnalyticsPage() {
 
   const COLORS = ['#ef4444', '#f59e0b', '#3b82f6', '#8b5cf6', '#10b981'];
 
+  const handleExportExcel = () => {
+    if (results.length === 0) {
+      Swal.fire({
+        title: 'Tidak Ada Data',
+        text: 'Belum ada mahasiswa yang mengumpulkan kuis untuk diekspor.',
+        icon: 'info',
+        confirmButtonColor: '#3b82f6'
+      });
+      return;
+    }
+
+    const exportRows = results.map((r, index) => ({
+      'Peringkat': index + 1,
+      'Nama Mahasiswa': r.studentName,
+      'Nilai (%)': r.score,
+      'Status': r.score >= 70 ? 'LULUS' : 'REMEDIAL',
+      'Jawaban Benar': r.correctCount,
+      'Total Soal': r.totalQuestions,
+      'Durasi Pengerjaan': `${Math.floor((r.timeSpentSeconds || 0) / 60)} menit ${(r.timeSpentSeconds || 0) % 60} detik`,
+      'Waktu Selesai': format(new Date(r.completedAt), 'dd/MM/yyyy HH:mm:ss')
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(exportRows);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Rekap Nilai');
+
+    const fileName = `Rekap_Nilai_${(quiz?.title || 'Quiz').replace(/[^a-zA-Z0-9]/g, '_')}.xlsx`;
+    XLSX.writeFile(workbook, fileName);
+
+    Swal.fire({
+      title: 'Berhasil Diekspor!',
+      text: `File Excel "${fileName}" berhasil diunduh.`,
+      icon: 'success',
+      timer: 2000,
+      showConfirmButton: false
+    });
+  };
+
+  const handleExportCSV = () => {
+    if (results.length === 0) {
+      Swal.fire({
+        title: 'Tidak Ada Data',
+        text: 'Belum ada mahasiswa yang mengumpulkan kuis untuk diekspor.',
+        icon: 'info',
+        confirmButtonColor: '#3b82f6'
+      });
+      return;
+    }
+
+    const exportRows = results.map((r, index) => ({
+      'Peringkat': index + 1,
+      'Nama Mahasiswa': r.studentName,
+      'Nilai (%)': r.score,
+      'Status': r.score >= 70 ? 'LULUS' : 'REMEDIAL',
+      'Jawaban Benar': r.correctCount,
+      'Total Soal': r.totalQuestions,
+      'Durasi': `${Math.floor((r.timeSpentSeconds || 0) / 60)}m ${(r.timeSpentSeconds || 0) % 60}s`,
+      'Waktu Selesai': format(new Date(r.completedAt), 'dd/MM/yyyy HH:mm:ss')
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(exportRows);
+    const csvContent = XLSX.utils.sheet_to_csv(worksheet);
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Rekap_Nilai_${(quiz?.title || 'Quiz').replace(/[^a-zA-Z0-9]/g, '_')}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="space-y-10">
-      <header className="flex items-center space-x-6">
-        <button onClick={() => navigate(-1)} className="p-3 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 text-slate-400 hover:text-slate-900 dark:hover:text-white transition-all shadow-sm hover:shadow-md active:scale-95">
-          <ArrowLeft className="w-6 h-6" />
-        </button>
-        <div>
-          <h1 className="text-4xl font-black text-slate-900 dark:text-white tracking-tight leading-none uppercase">{quiz?.title}</h1>
-          <p className="text-slate-500 dark:text-slate-400 mt-2 font-medium">Performance Metrics & Analytical Breakdown</p>
+      <header className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <div className="flex items-center space-x-6">
+          <button onClick={() => navigate(-1)} className="p-3 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 text-slate-400 hover:text-slate-900 dark:hover:text-white transition-all shadow-sm hover:shadow-md active:scale-95">
+            <ArrowLeft className="w-6 h-6" />
+          </button>
+          <div>
+            <h1 className="text-3xl sm:text-4xl font-black text-slate-900 dark:text-white tracking-tight leading-none uppercase">{quiz?.title}</h1>
+            <p className="text-slate-500 dark:text-slate-400 mt-2 font-medium">Performance Metrics & Analytical Breakdown</p>
+          </div>
+        </div>
+
+        {/* Action Controls: Export Excel & CSV */}
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            onClick={handleExportExcel}
+            className="inline-flex items-center gap-2 px-5 py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs uppercase tracking-wider shadow-lg shadow-emerald-500/20 active:scale-95 transition-all"
+            title="Download Rekap Nilai Format Microsoft Excel"
+          >
+            <FileSpreadsheet className="w-4 h-4" />
+            <span>Export Excel (.xlsx)</span>
+          </button>
+          <button
+            onClick={handleExportCSV}
+            className="inline-flex items-center gap-2 px-4 py-3 rounded-2xl bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 font-black text-xs uppercase tracking-wider shadow-sm active:scale-95 transition-all"
+            title="Download Rekap Format CSV"
+          >
+            <Download className="w-4 h-4" />
+            <span>Export CSV</span>
+          </button>
         </div>
       </header>
 

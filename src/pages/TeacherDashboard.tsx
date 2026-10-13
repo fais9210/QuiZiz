@@ -122,7 +122,7 @@ export default function TeacherDashboard() {
               {t('dashboard.welcome') || 'WELCOME BACK'}, <span className="text-blue-500">{profile?.displayName || user?.displayName || 'Instructor'}</span>
             </h1>
             <p className="text-slate-400 font-medium text-sm sm:text-base max-w-xl leading-relaxed">
-              Construct high-fidelity assessments, configure real-time queues, and supervise collective student trajectory from a central dashboard.
+              Selamat Datang Mahasiswa Teknik Informatika, Silahkan Kerjakan Quiz dengan baik dan benar, sesuai dengan arahan Bapak/Ibu Dosen. Terima kasih atas perhatiannya
             </p>
           </div>
           <Link
