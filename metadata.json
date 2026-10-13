@@ -1,0 +1,6 @@
+{
+  "name": "LMS_TIF",
+  "description": "A powerful Learning Management System for the TIF department, allowing teachers to manage quizzes, customize branding, and track student performance in multiple languages.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

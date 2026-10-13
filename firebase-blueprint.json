@@ -1,0 +1,82 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile and role information",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "displayName": { "type": "string" },
+        "email": { "type": "string" },
+        "role": { "type": "string", "enum": ["teacher", "student"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "username": { "type": "string" },
+        "password": { "type": "string" }
+      },
+      "required": ["uid", "displayName", "email", "role"]
+    },
+    "Quiz": {
+      "title": "Quiz",
+      "description": "Quiz metadata",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "timeLimit": { "type": "number", "description": "Time limit in minutes" },
+        "teacherId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "questionCount": { "type": "number" }
+      },
+      "required": ["title", "timeLimit", "teacherId"]
+    },
+    "Question": {
+      "title": "Question",
+      "description": "A single question within a quiz",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "quizId": { "type": "string" },
+        "text": { "type": "string" },
+        "options": {
+          "type": "array",
+          "description": "Array of 4 options (A, B, C, D)"
+        },
+        "correctOptionId": { "type": "string" }
+      },
+      "required": ["quizId", "text", "options", "correctOptionId"]
+    },
+    "Result": {
+      "title": "Result",
+      "description": "A student's quiz attempt result",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "quizId": { "type": "string" },
+        "studentId": { "type": "string" },
+        "score": { "type": "number" },
+        "totalQuestions": { "type": "number" },
+        "completedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["quizId", "studentId", "score", "totalQuestions"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "Store user roles and profiles"
+    },
+    "/quizzes/{quizId}": {
+      "schema": "Quiz",
+      "description": "Store quiz definitions"
+    },
+    "/quizzes/{quizId}/questions/{questionId}": {
+      "schema": "Question",
+      "description": "Store questions for a specific quiz"
+    },
+    "/results/{resultId}": {
+      "schema": "Result",
+      "description": "Store quiz outcomes"
+    }
+  }
+}

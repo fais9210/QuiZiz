@@ -1,0 +1,81 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+    
+    function getProfile(userId) {
+      return get(/databases/$(database)/documents/users/$(userId)).data;
+    }
+    
+    function isTeacher() {
+      return isSignedIn() && getProfile(request.auth.uid).role == 'teacher';
+    }
+
+    function isStudent() {
+      return isSignedIn() && getProfile(request.auth.uid).role == 'student';
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128;
+    }
+
+    // User Profiles
+    match /users/{userId} {
+      allow read: if true;
+      allow create, update, delete: if request.auth == null || 
+                                       isOwner(userId) || 
+                                       userId == 'mock-teacher-fais' ||
+                                       (isSignedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'teacher');
+    }
+
+    // Quizzes
+    match /quizzes/{quizId} {
+      allow read: if true;
+      allow create: if (isSignedIn() && request.resource.data.teacherId == request.auth.uid) ||
+                       request.resource.data.teacherId == 'mock-teacher-fais';
+      allow update, delete: if (isSignedIn() && resource.data.teacherId == request.auth.uid) ||
+                               resource.data.teacherId == 'mock-teacher-fais';
+      
+      match /questions/{questionId} {
+        allow read: if true;
+        allow write: if (isSignedIn() && get(/databases/$(database)/documents/quizzes/$(quizId)).data.teacherId == request.auth.uid) ||
+                        get(/databases/$(database)/documents/quizzes/$(quizId)).data.teacherId == 'mock-teacher-fais';
+      }
+    }
+
+    // Results
+    match /results/{resultId} {
+      // Allow read for leaderboard visibility (Score & Name & Time)
+      allow read: if true;
+      
+      // Allow creation for guests and students
+      allow create: if true;
+      
+      // Allow teachers to delete results from their quizzes
+      allow delete: if (isSignedIn() && (
+        resource.data.teacherId == request.auth.uid ||
+        get(/databases/$(database)/documents/quizzes/resource.data.quizId).data.teacherId == request.auth.uid
+      )) || resource.data.teacherId == 'mock-teacher-fais' ||
+         get(/databases/$(database)/documents/quizzes/resource.data.quizId).data.teacherId == 'mock-teacher-fais';
+      
+      allow update: if false;
+    }
+
+    // Templates
+    match /templates/{templateId} {
+      allow read: if (isSignedIn() && resource.data.teacherId == request.auth.uid) ||
+                     resource.data.teacherId == 'mock-teacher-fais';
+      allow create: if (isSignedIn() && request.resource.data.teacherId == request.auth.uid) ||
+                       request.resource.data.teacherId == 'mock-teacher-fais';
+      allow update, delete: if (isSignedIn() && resource.data.teacherId == request.auth.uid) ||
+                               resource.data.teacherId == 'mock-teacher-fais';
+    }
+  }
+}
