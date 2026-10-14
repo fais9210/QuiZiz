@@ -437,7 +437,7 @@ export default function QuizTakePage() {
               required
               value={guestName}
               onChange={(e) => setGuestName(e.target.value)}
-              placeholder="e.g. John Doe"
+              placeholder="Nama Lengkap"
               className="w-full px-6 py-4 rounded-2xl bg-slate-50 dark:bg-slate-800 border-2 border-transparent focus:border-blue-600 focus:bg-white dark:focus:bg-slate-800 outline-none transition-all dark:text-white font-bold placeholder:text-slate-300"
             />
           </div>
