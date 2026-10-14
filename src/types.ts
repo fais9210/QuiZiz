@@ -20,6 +20,8 @@ export interface Quiz {
   description: string;
   timeLimit: number; // in minutes
   teacherId: string;
+  teacherUsername?: string;
+  teacherName?: string;
   createdAt: string;
   questionCount: number;
   startDate?: string;

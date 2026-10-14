@@ -71,7 +71,7 @@ interface LocalQuestion extends Partial<Question> {
 }
 
 export default function QuizCreatePage() {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const { id } = useParams();
   const navigate = useNavigate();
   const { t } = useTranslation();
@@ -898,13 +898,19 @@ export default function QuizCreatePage() {
 
     setSaving(true);
     try {
+      const currentTeacherId = profile?.uid || user?.uid || (profile?.username === 'fais' ? 'fais' : 'fais');
+      const currentTeacherUsername = (profile?.username || (profile?.email === 'faishol16@gmail.com' ? 'fais' : user?.email?.split('@')[0]) || 'fais').toLowerCase();
+      const currentTeacherName = profile?.displayName || user?.displayName || 'Dosen';
+
       const quizData: any = {
         title,
         description,
         timeLimit: Number(timeLimit),
         startDate: startDate || null,
         endDate: endDate || null,
-        teacherId: user?.uid,
+        teacherId: currentTeacherId,
+        teacherUsername: currentTeacherUsername,
+        teacherName: currentTeacherName,
         questionCount: questions.length
       };
 

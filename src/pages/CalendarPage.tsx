@@ -19,7 +19,7 @@ import { useAuth } from '../components/AuthProvider';
 import { Quiz } from '../types';
 
 export default function CalendarPage() {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [events, setEvents] = useState<Record<string, Quiz[]>>({});
 
@@ -29,8 +29,31 @@ export default function CalendarPage() {
       const snap = await getDocs(q);
       const eventMap: Record<string, Quiz[]> = {};
       
+      const currentUid = user?.uid;
+      const currentUsername = (profile?.username || (profile?.email === 'faishol16@gmail.com' ? 'fais' : '')).toLowerCase();
+      const isFais = currentUid === 'fais' || currentUid === 'mock-teacher-fais' || currentUsername === 'fais' || user?.email === 'faishol16@gmail.com';
+      const isTeacher = profile?.role === 'teacher';
+
       snap.forEach(doc => {
         const quiz = { id: doc.id, ...doc.data() } as Quiz;
+        if (isTeacher) {
+          let belongs = false;
+          if (isFais) {
+            belongs = 
+              quiz.teacherId === 'fais' || 
+              quiz.teacherId === 'mock-teacher-fais' || 
+              quiz.teacherId === 'z0GQp7k45ZbaBnphWJfg32cCqxo1' || 
+              quiz.teacherUsername?.toLowerCase() === 'fais' || 
+              quiz.teacherId === currentUid;
+          } else {
+            belongs = 
+              quiz.teacherId === currentUid || 
+              quiz.teacherId === profile?.uid || 
+              (Boolean(currentUsername) && quiz.teacherUsername?.toLowerCase() === currentUsername);
+          }
+          if (!belongs) return;
+        }
+
         if (quiz.createdAt) {
           const dateKey = format(new Date(quiz.createdAt), 'yyyy-MM-dd');
           if (!eventMap[dateKey]) eventMap[dateKey] = [];
@@ -40,7 +63,7 @@ export default function CalendarPage() {
       setEvents(eventMap);
     };
     fetchQuizzes();
-  }, []);
+  }, [user, profile]);
 
   const renderHeader = () => {
     return (

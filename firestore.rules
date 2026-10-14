@@ -38,44 +38,21 @@ service cloud.firestore {
     // Quizzes
     match /quizzes/{quizId} {
       allow read: if true;
-      allow create: if (isSignedIn() && request.resource.data.teacherId == request.auth.uid) ||
-                       request.resource.data.teacherId == 'mock-teacher-fais';
-      allow update, delete: if (isSignedIn() && resource.data.teacherId == request.auth.uid) ||
-                               resource.data.teacherId == 'mock-teacher-fais';
+      allow create, update, delete: if true;
       
       match /questions/{questionId} {
-        allow read: if true;
-        allow write: if (isSignedIn() && get(/databases/$(database)/documents/quizzes/$(quizId)).data.teacherId == request.auth.uid) ||
-                        get(/databases/$(database)/documents/quizzes/$(quizId)).data.teacherId == 'mock-teacher-fais';
+        allow read, write: if true;
       }
     }
 
     // Results
     match /results/{resultId} {
-      // Allow read for leaderboard visibility (Score & Name & Time)
-      allow read: if true;
-      
-      // Allow creation for guests and students
-      allow create: if true;
-      
-      // Allow teachers to delete results from their quizzes
-      allow delete: if (isSignedIn() && (
-        resource.data.teacherId == request.auth.uid ||
-        get(/databases/$(database)/documents/quizzes/resource.data.quizId).data.teacherId == request.auth.uid
-      )) || resource.data.teacherId == 'mock-teacher-fais' ||
-         get(/databases/$(database)/documents/quizzes/resource.data.quizId).data.teacherId == 'mock-teacher-fais';
-      
-      allow update: if false;
+      allow read, write: if true;
     }
 
     // Templates
     match /templates/{templateId} {
-      allow read: if (isSignedIn() && resource.data.teacherId == request.auth.uid) ||
-                     resource.data.teacherId == 'mock-teacher-fais';
-      allow create: if (isSignedIn() && request.resource.data.teacherId == request.auth.uid) ||
-                       request.resource.data.teacherId == 'mock-teacher-fais';
-      allow update, delete: if (isSignedIn() && resource.data.teacherId == request.auth.uid) ||
-                               resource.data.teacherId == 'mock-teacher-fais';
+      allow read, write: if true;
     }
   }
 }

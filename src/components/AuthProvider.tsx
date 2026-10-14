@@ -25,23 +25,50 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let unsubscribeProfile: (() => void) | null = null;
 
-    // Check if custom mock user is logged in
+    // Migrate legacy 'lms_mock_teacher' to real user 'fais'
+    if (localStorage.getItem('lms_mock_teacher') === 'true') {
+      localStorage.removeItem('lms_mock_teacher');
+      localStorage.setItem('lms_custom_user_uid', 'fais');
+    }
+
+    // Check if custom user is logged in
     const cachedUserUid = localStorage.getItem('lms_custom_user_uid');
     if (cachedUserUid) {
-      unsubscribeProfile = onSnapshot(doc(db, 'users', cachedUserUid), (snapshot) => {
+      const targetUid = cachedUserUid === 'mock-teacher-fais' ? 'fais' : cachedUserUid;
+      if (targetUid !== cachedUserUid) {
+        localStorage.setItem('lms_custom_user_uid', 'fais');
+      }
+
+      unsubscribeProfile = onSnapshot(doc(db, 'users', targetUid), (snapshot) => {
         if (snapshot.exists()) {
           const profileData = snapshot.data() as UserProfile;
-          const mockUser: any = {
-            uid: profileData.uid,
+          const currentUser: any = {
+            uid: profileData.uid || targetUid,
             displayName: profileData.displayName,
             email: profileData.email,
             emailVerified: true
           };
-          setUser(mockUser);
+          setUser(currentUser);
           setProfile(profileData);
           if (profileData.preferredLanguage) {
             i18n.changeLanguage(profileData.preferredLanguage);
           }
+        } else if (targetUid === 'fais') {
+          const faisProfile: UserProfile = {
+            uid: 'fais',
+            displayName: 'Muhammad Faishol Amrulloh',
+            email: 'faishol16@gmail.com',
+            username: 'fais',
+            role: 'teacher',
+            createdAt: new Date().toISOString()
+          };
+          setUser({
+            uid: 'fais',
+            displayName: faisProfile.displayName,
+            email: faisProfile.email,
+            emailVerified: true
+          } as any);
+          setProfile(faisProfile);
         } else {
           localStorage.removeItem('lms_custom_user_uid');
           setUser(null);
@@ -50,34 +77,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setLoading(false);
       }, (error) => {
         console.error("Error fetching cached profile:", error);
+        if (targetUid === 'fais') {
+          const faisProfile: UserProfile = {
+            uid: 'fais',
+            displayName: 'Muhammad Faishol Amrulloh',
+            email: 'faishol16@gmail.com',
+            username: 'fais',
+            role: 'teacher',
+            createdAt: new Date().toISOString()
+          };
+          setUser({
+            uid: 'fais',
+            displayName: faisProfile.displayName,
+            email: faisProfile.email,
+            emailVerified: true
+          } as any);
+          setProfile(faisProfile);
+        }
         setLoading(false);
       });
 
       return () => {
         if (unsubscribeProfile) unsubscribeProfile();
       };
-    }
-
-    // Check if mock teacher is logged in
-    const isMockTeacher = localStorage.getItem('lms_mock_teacher') === 'true';
-    if (isMockTeacher) {
-      const mockUser: any = {
-        uid: 'mock-teacher-fais',
-        displayName: 'Fais (Dosen)',
-        email: 'fais@lms-tif.id',
-        emailVerified: true
-      };
-      const mockProfile: UserProfile = {
-        uid: 'mock-teacher-fais',
-        displayName: 'Fais',
-        email: 'fais@lms-tif.id',
-        role: 'teacher',
-        createdAt: new Date().toISOString()
-      };
-      setUser(mockUser);
-      setProfile(mockProfile);
-      setLoading(false);
-      return;
     }
 
     const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
@@ -144,112 +166,89 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, [i18n]);
 
-  const loginWithMockTeacher = () => {
-    const mockUser: any = {
-      uid: 'mock-teacher-fais',
-      displayName: 'Fais (Dosen)',
-      email: 'fais@lms-tif.id',
-      emailVerified: true
-    };
-    const mockProfile: UserProfile = {
-      uid: 'mock-teacher-fais',
-      displayName: 'Fais',
-      email: 'fais@lms-tif.id',
+  const loginAsFais = () => {
+    const faisProfile: UserProfile = {
+      uid: 'fais',
+      displayName: 'Muhammad Faishol Amrulloh',
+      email: 'faishol16@gmail.com',
+      username: 'fais',
       role: 'teacher',
       createdAt: new Date().toISOString()
     };
-    setUser(mockUser);
-    setProfile(mockProfile);
-    localStorage.setItem('lms_mock_teacher', 'true');
+    const userObj: any = {
+      uid: 'fais',
+      displayName: 'Muhammad Faishol Amrulloh',
+      email: 'faishol16@gmail.com',
+      emailVerified: true
+    };
+    setUser(userObj);
+    setProfile(faisProfile);
+    localStorage.removeItem('lms_mock_teacher');
+    localStorage.setItem('lms_custom_user_uid', 'fais');
     return true;
   };
 
   const signInWithCredentials = async (username: string, password: string): Promise<boolean> => {
     const inputUsername = username.trim().toLowerCase();
 
-    // 1. Check if login is the default Fais lecturer login
-    if (inputUsername === 'fais') {
-      if (password !== 'fais123') {
-        throw new Error('Password tidak valid.');
-      }
-
-      const email = 'fais@lms-tif.id';
-      try {
-        localStorage.removeItem('lms_mock_teacher');
-        localStorage.removeItem('lms_custom_user_uid');
-        await signInWithEmailAndPassword(auth, email, password);
-        return true;
-      } catch (error: any) {
-        console.warn('Sign-in with email failed:', error.code, error.message);
-        
-        if (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential') {
-          try {
-            const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-            const newUser = userCredential.user;
-            const newProfile: UserProfile = {
-              uid: newUser.uid,
-              displayName: 'Fais',
-              email: email,
-              role: 'teacher',
-              createdAt: new Date().toISOString(),
-            };
-            await setDoc(doc(db, 'users', newUser.uid), newProfile);
-            return true;
-          } catch (createError: any) {
-            console.error('Failed to create teacher user in FB:', createError);
-            if (createError.code === 'auth/operation-not-allowed') {
-              console.warn('Email/Password not enabled in Firebase Console. Falling back to frontend-only mock.');
-              return loginWithMockTeacher();
-            }
-            throw createError;
-          }
-        } else if (error.code === 'auth/operation-not-allowed') {
-          console.warn('Email/Password not enabled in Firebase Console. Falling back to frontend-only mock.');
-          return loginWithMockTeacher();
-        } else {
-          throw error;
-        }
-      }
-    }
-
-    // 2. Query Firestore for credentials matching username
+    // 1. Try querying Firestore users collection
     try {
-      const { getDocs, query, collection, where } = await import('firebase/firestore');
-      const q = query(collection(db, 'users'), where('username', '==', inputUsername));
-      const querySnapshot = await getDocs(q);
-
-      if (querySnapshot.empty) {
-        throw new Error('User tidak ditemukan. Periksa kembali username Anda.');
-      }
-
+      const { getDocs, getDoc, query, collection, where } = await import('firebase/firestore');
+      
       let matchedProfile: UserProfile | null = null;
-      querySnapshot.forEach((doc) => {
-        const data = doc.data() as UserProfile;
-        if (data.password === password) {
-          matchedProfile = data;
-        }
-      });
 
-      if (!matchedProfile) {
-        throw new Error('Password salah atau tidak valid.');
+      // Direct document lookup by ID
+      const directDoc = await getDoc(doc(db, 'users', inputUsername));
+      if (directDoc.exists()) {
+        const data = directDoc.data() as UserProfile;
+        if (data.password === password) {
+          matchedProfile = { ...data, uid: data.uid || directDoc.id };
+        }
       }
 
-      // Record custom mock user session
-      localStorage.removeItem('lms_mock_teacher');
-      localStorage.setItem('lms_custom_user_uid', (matchedProfile as UserProfile).uid);
+      // If not found by doc id, query by username field
+      if (!matchedProfile) {
+        const q = query(collection(db, 'users'), where('username', '==', inputUsername));
+        const querySnapshot = await getDocs(q);
+        querySnapshot.forEach((d) => {
+          const data = d.data() as UserProfile;
+          if (data.password === password) {
+            matchedProfile = { ...data, uid: data.uid || d.id };
+          }
+        });
+      }
 
-      const mockUser: any = {
-        uid: (matchedProfile as UserProfile).uid,
-        displayName: (matchedProfile as UserProfile).displayName,
-        email: (matchedProfile as UserProfile).email,
-        emailVerified: true
-      };
+      if (matchedProfile) {
+        localStorage.removeItem('lms_mock_teacher');
+        localStorage.setItem('lms_custom_user_uid', (matchedProfile as UserProfile).uid);
 
-      setUser(mockUser);
-      setProfile(matchedProfile);
-      return true;
+        const activeUser: any = {
+          uid: (matchedProfile as UserProfile).uid,
+          displayName: (matchedProfile as UserProfile).displayName,
+          email: (matchedProfile as UserProfile).email,
+          emailVerified: true
+        };
+
+        setUser(activeUser);
+        setProfile(matchedProfile);
+        return true;
+      }
+
+      // 2. Fallback check for default lecturer 'fais'
+      if (inputUsername === 'fais') {
+        if (password === 'fais123') {
+          return loginAsFais();
+        } else {
+          throw new Error('Password salah. Silakan coba lagi.');
+        }
+      }
+
+      throw new Error('Username atau password tidak cocok.');
     } catch (e: any) {
-      console.error("Credentials login failed:", e);
+      if (inputUsername === 'fais' && password === 'fais123') {
+        return loginAsFais();
+      }
+      console.error("Credentials login error:", e);
       throw e;
     }
   };

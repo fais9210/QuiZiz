@@ -26,22 +26,49 @@ export default function TeacherDashboard() {
 
     const fetchData = async () => {
       try {
-        const q = query(collection(db, 'quizzes'), where('teacherId', '==', user.uid));
-        const querySnapshot = await getDocs(q);
+        const currentUid = user.uid;
+        const currentUsername = (profile?.username || (profile?.email === 'faishol16@gmail.com' ? 'fais' : '')).toLowerCase();
+        const isFais = currentUid === 'fais' || currentUid === 'mock-teacher-fais' || currentUsername === 'fais' || user.email === 'faishol16@gmail.com';
+
+        const querySnapshot = await getDocs(collection(db, 'quizzes'));
         const quizList: Quiz[] = [];
         querySnapshot.forEach((doc) => {
-          quizList.push({ id: doc.id, ...doc.data() } as Quiz);
+          const data = doc.data() as Quiz;
+          const quiz = { id: doc.id, ...data };
+
+          let belongsToUser = false;
+          if (isFais) {
+            belongsToUser = 
+              quiz.teacherId === 'fais' || 
+              quiz.teacherId === 'mock-teacher-fais' || 
+              quiz.teacherId === 'z0GQp7k45ZbaBnphWJfg32cCqxo1' || 
+              quiz.teacherUsername?.toLowerCase() === 'fais' || 
+              quiz.teacherId === currentUid;
+          } else {
+            belongsToUser = 
+              quiz.teacherId === currentUid || 
+              quiz.teacherId === profile?.uid || 
+              (Boolean(currentUsername) && quiz.teacherUsername?.toLowerCase() === currentUsername);
+          }
+
+          if (belongsToUser) {
+            quizList.push(quiz);
+          }
         });
+
         // Sort by createdAt desc
         quizList.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
         setQuizzes(quizList);
 
-        // Fetch all teacher's results in one query
-        const resQuery = query(collection(db, 'results'), where('teacherId', '==', user.uid));
-        const resSnap = await getDocs(resQuery);
+        // Fetch results for this teacher's quizzes
+        const quizIds = new Set(quizList.map(q => q.id));
+        const resSnap = await getDocs(collection(db, 'results'));
         const allResults: Result[] = [];
         resSnap.forEach((d) => {
-          allResults.push({ id: d.id, ...d.data() } as Result);
+          const r = { id: d.id, ...d.data() } as Result;
+          if (quizIds.has(r.quizId)) {
+            allResults.push(r);
+          }
         });
 
         // Aggregate stats
@@ -65,7 +92,7 @@ export default function TeacherDashboard() {
     };
 
     fetchData();
-  }, [user]);
+  }, [user, profile]);
 
   const handleDelete = async (id: string) => {
     const { isConfirmed } = await Swal.fire({

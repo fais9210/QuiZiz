@@ -19,9 +19,17 @@ export default function QuizCard({ quiz, href, actionText, secondaryHref, second
       
       <div className="flex flex-col flex-1 relative z-10">
         <div className="mb-4 sm:mb-6">
-          <span className="px-2 sm:px-3 py-1 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-300 rounded-full text-[9px] sm:text-[10px] font-black uppercase tracking-widest mb-3 sm:mb-4 inline-block">
-            Assessment
-          </span>
+          <div className="flex flex-wrap items-center gap-2 mb-3 sm:mb-4">
+            <span className="px-2 sm:px-3 py-1 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-300 rounded-full text-[9px] sm:text-[10px] font-black uppercase tracking-widest inline-block">
+              Assessment
+            </span>
+            {(quiz.teacherName || quiz.teacherUsername) && (
+              <span className="px-2 sm:px-2.5 py-1 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-full text-[9px] sm:text-[10px] font-bold border border-slate-200 dark:border-slate-700/60 inline-flex items-center gap-1">
+                <span>Dosen:</span>
+                <span className="text-slate-900 dark:text-white font-black">{quiz.teacherName || quiz.teacherUsername}</span>
+              </span>
+            )}
+          </div>
           <h3 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white mb-2 line-clamp-1 leading-tight group-hover:text-blue-600 transition-colors uppercase tracking-tight">
             {quiz.title}
           </h3>

@@ -39,7 +39,7 @@ import { useTranslation } from 'react-i18next';
 export default function QuizAnalyticsPage() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const { t } = useTranslation();
   const [quiz, setQuiz] = useState<Quiz | null>(null);
   const [results, setResults] = useState<Result[]>([]);
@@ -58,15 +58,22 @@ export default function QuizAnalyticsPage() {
       setQuiz(quizData);
 
       // Verify ownership
-      if (quizData.teacherId !== user.uid) {
+      const currentUid = user.uid;
+      const currentUsername = (profile?.username || (profile?.email === 'faishol16@gmail.com' ? 'fais' : '')).toLowerCase();
+      const isFais = currentUid === 'fais' || currentUid === 'mock-teacher-fais' || currentUsername === 'fais' || user.email === 'faishol16@gmail.com';
+
+      const isOwner = isFais
+        ? (quizData.teacherId === 'fais' || quizData.teacherId === 'mock-teacher-fais' || quizData.teacherId === 'z0GQp7k45ZbaBnphWJfg32cCqxo1' || quizData.teacherUsername?.toLowerCase() === 'fais' || quizData.teacherId === currentUid)
+        : (quizData.teacherId === currentUid || quizData.teacherId === profile?.uid || (Boolean(currentUsername) && quizData.teacherUsername?.toLowerCase() === currentUsername));
+
+      if (!isOwner) {
         navigate('/dashboard');
         return;
       }
 
       const resQuery = query(
         collection(db, 'results'),
-        where('quizId', '==', id),
-        where('teacherId', '==', user.uid)
+        where('quizId', '==', id)
       );
       const resSnap = await getDocs(resQuery);
       const resList: Result[] = [];
@@ -77,7 +84,7 @@ export default function QuizAnalyticsPage() {
     };
 
     fetchData();
-  }, [id]);
+  }, [id, user, profile]);
 
   const handleDeleteResult = async (resultId: string) => {
     const { isConfirmed } = await Swal.fire({

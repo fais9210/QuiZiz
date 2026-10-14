@@ -7,6 +7,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { AuthProvider } from './components/AuthProvider';
 import { ThemeProvider } from './components/ThemeProvider';
 import Layout from './components/Layout';
+import MobileBackHandler from './components/MobileBackHandler';
 
 // Pages
 import LandingPage from './pages/LandingPage';
@@ -25,6 +26,7 @@ export default function App() {
     <ThemeProvider>
       <AuthProvider>
         <Router>
+          <MobileBackHandler />
           <Layout>
             <Routes>
               <Route path="/" element={<LandingPage />} />
