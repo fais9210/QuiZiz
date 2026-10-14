@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
 import { 
   onAuthStateChanged, 
   signInWithPopup, 
@@ -21,10 +21,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const { i18n } = useTranslation();
+  const profileUnsubscribeRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
-    let unsubscribeProfile: (() => void) | null = null;
-
     // Migrate legacy 'lms_mock_teacher' to real user 'fais'
     if (localStorage.getItem('lms_mock_teacher') === 'true') {
       localStorage.removeItem('lms_mock_teacher');
@@ -39,7 +38,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         localStorage.setItem('lms_custom_user_uid', 'fais');
       }
 
-      unsubscribeProfile = onSnapshot(doc(db, 'users', targetUid), (snapshot) => {
+      profileUnsubscribeRef.current = onSnapshot(doc(db, 'users', targetUid), (snapshot) => {
         if (snapshot.exists()) {
           const profileData = snapshot.data() as UserProfile;
           const currentUser: any = {
@@ -98,21 +97,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
 
       return () => {
-        if (unsubscribeProfile) unsubscribeProfile();
+        if (profileUnsubscribeRef.current) {
+          profileUnsubscribeRef.current();
+          profileUnsubscribeRef.current = null;
+        }
       };
     }
 
     const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
       setUser(user);
       
-      if (unsubscribeProfile) {
-        unsubscribeProfile();
-        unsubscribeProfile = null;
+      if (profileUnsubscribeRef.current) {
+        profileUnsubscribeRef.current();
+        profileUnsubscribeRef.current = null;
       }
 
       if (user) {
         // Listen for profile changes
-        unsubscribeProfile = onSnapshot(doc(db, 'users', user.uid), async (snapshot) => {
+        profileUnsubscribeRef.current = onSnapshot(doc(db, 'users', user.uid), async (snapshot) => {
           if (snapshot.exists()) {
             const profileData = snapshot.data() as UserProfile;
             setProfile(profileData);
@@ -155,14 +157,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setLoading(false);
         });
       } else {
-        setProfile(null);
-        setLoading(false);
+        if (!localStorage.getItem('lms_custom_user_uid')) {
+          setProfile(null);
+          setLoading(false);
+        }
       }
     });
 
     return () => {
       unsubscribeAuth();
-      if (unsubscribeProfile) unsubscribeProfile();
+      if (profileUnsubscribeRef.current) {
+        profileUnsubscribeRef.current();
+        profileUnsubscribeRef.current = null;
+      }
     };
   }, [i18n]);
 
@@ -266,9 +273,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signOut = async () => {
-    localStorage.removeItem('lms_mock_teacher');
-    localStorage.removeItem('lms_custom_user_uid');
-    await firebaseSignOut(auth);
+    try {
+      localStorage.removeItem('lms_mock_teacher');
+      localStorage.removeItem('lms_custom_user_uid');
+      sessionStorage.removeItem('lumina_pending_quiz');
+      
+      if (profileUnsubscribeRef.current) {
+        profileUnsubscribeRef.current();
+        profileUnsubscribeRef.current = null;
+      }
+
+      if (auth.currentUser) {
+        await firebaseSignOut(auth);
+      }
+    } catch (error) {
+      console.error('Sign out error:', error);
+    } finally {
+      setUser(null);
+      setProfile(null);
+      setLoading(false);
+    }
   };
 
   const isTeacher = profile?.role === 'teacher';

@@ -1,15 +1,49 @@
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from './AuthProvider';
 import { useTheme } from './ThemeProvider';
 import { Sun, Moon, LogOut, LayoutDashboard, Calendar, GraduationCap, Settings, Users } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useTranslation } from 'react-i18next';
+import Swal from 'sweetalert2';
 
 export default function Navbar() {
   const { user, profile, signOut, isTeacher } = useAuth();
   const { isDark, toggleTheme } = useTheme();
   const location = useLocation();
+  const navigate = useNavigate();
   const { t } = useTranslation();
+
+  const handleLogout = async () => {
+    try {
+      const result = await Swal.fire({
+        title: 'Konfirmasi Logout',
+        text: 'Apakah Anda yakin ingin keluar dari akun?',
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonColor: '#ef4444',
+        cancelButtonColor: '#64748b',
+        confirmButtonText: 'Ya, Keluar',
+        cancelButtonText: 'Batal',
+        reverseButtons: true
+      });
+
+      if (result.isConfirmed) {
+        await signOut();
+        navigate('/login', { replace: true });
+        Swal.fire({
+          icon: 'success',
+          title: 'Berhasil Keluar',
+          text: 'Anda telah berhasil logout.',
+          timer: 1500,
+          showConfirmButton: false
+        });
+      }
+    } catch (err) {
+      console.error('Logout error:', err);
+      await signOut();
+      navigate('/login', { replace: true });
+    }
+  };
 
   const navItems = user ? [
     { name: t('nav.dashboard'), path: '/dashboard', icon: LayoutDashboard },
@@ -79,7 +113,7 @@ export default function Navbar() {
                   </span>
                 </div>
                 <button
-                  onClick={signOut}
+                  onClick={handleLogout}
                   className="inline-flex items-center px-3 py-2 sm:px-4 sm:py-2 border-2 border-slate-100 dark:border-slate-800 text-xs sm:text-sm font-bold rounded-xl text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
                 >
                   <LogOut className="w-4 h-4 sm:mr-2" />
@@ -118,7 +152,7 @@ export default function Navbar() {
             </Link>
           ))}
           <button
-            onClick={signOut}
+            onClick={handleLogout}
             className="flex flex-col items-center gap-1 text-slate-400 dark:text-slate-500"
           >
             <div className="p-2">

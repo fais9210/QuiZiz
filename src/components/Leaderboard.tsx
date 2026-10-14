@@ -73,9 +73,20 @@ export default function Leaderboard({ results }: LeaderboardProps) {
                   </td>
                   <td className="px-8 py-6">
                     <div className="flex flex-col">
-                      <span className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-tight">
-                        {result.studentName}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-tight">
+                          {result.studentName}
+                        </span>
+                        {result.disqualified ? (
+                          <span className="px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300">
+                            Didiskualifikasi
+                          </span>
+                        ) : result.tabSwitchViolations && result.tabSwitchViolations > 0 ? (
+                          <span className="px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
+                            {result.tabSwitchViolations}x Pindah Tab
+                          </span>
+                        ) : null}
+                      </div>
                       <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
                         {result.isGuest ? 'External Asset' : 'Internal Student'}
                       </span>

@@ -4,7 +4,7 @@ import { collection, doc, getDoc, getDocs, addDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useAuth } from '../components/AuthProvider';
 import { Quiz, Question, Result } from '../types';
-import { Clock, ChevronRight, ChevronLeft, Send, AlertCircle, Trophy, CheckCircle2, Check, X, Calendar } from 'lucide-react';
+import { Clock, ChevronRight, ChevronLeft, Send, AlertCircle, Trophy, CheckCircle2, Check, X, Calendar, ShieldAlert } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import Swal from 'sweetalert2';
 import { formatTime } from '../lib/utils';
@@ -32,6 +32,22 @@ export default function QuizTakePage() {
   const [resultData, setResultData] = useState<Omit<Result, 'id'> | null>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
+  // Anti-Cheat & Tab Switch Tracking
+  const maxViolations = 3;
+  const [tabSwitchCount, setTabSwitchCount] = useState<number>(() => {
+    if (!id) return 0;
+    const userKey = user ? user.uid : 'guest';
+    const saved = sessionStorage.getItem(`lms_tab_switches_${id}_${userKey}`);
+    return saved ? parseInt(saved, 10) : 0;
+  });
+  const tabSwitchCountRef = useRef(tabSwitchCount);
+  const warningActiveRef = useRef(false);
+  const isSubmittingRef = useRef(false);
+
+  useEffect(() => {
+    tabSwitchCountRef.current = tabSwitchCount;
+  }, [tabSwitchCount]);
+
   // Keep a reference to the latest answers so that auto-submit has access to the up-to-date states
   const answersRef = useRef(answers);
   useEffect(() => {
@@ -41,8 +57,6 @@ export default function QuizTakePage() {
   useEffect(() => {
     // If user is not logged in, we check if they've already entered a guest name
     if (!authLoading && !user && !hasEnteredName) {
-      // We don't navigate to login anymore, as we want to allow guest name entry
-      // session storage flag can stay for other purposes if needed
       sessionStorage.setItem('lumina_pending_quiz', 'true');
     }
   }, [user, authLoading, hasEnteredName]);
@@ -70,12 +84,46 @@ export default function QuizTakePage() {
       const qSnap = await getDocs(collection(db, `quizzes/${id}/questions`));
       const qList: Question[] = [];
       qSnap.forEach(d => qList.push({ id: d.id, ...d.data() } as Question));
-      setQuestions(qList);
+
+      // Acak soal yang sudah tersimpan (Fisher-Yates Shuffle)
+      const userKey = user ? user.uid : (guestName.trim() || 'guest');
+      const shuffleKey = `lms_quiz_shuffled_${id}_${userKey}`;
+      let finalQuestions: Question[] = [];
+
+      try {
+        const savedShuffled = sessionStorage.getItem(shuffleKey);
+        if (savedShuffled) {
+          const orderedIds: string[] = JSON.parse(savedShuffled);
+          const qMap = new Map(qList.map(q => [q.id, q]));
+          finalQuestions = orderedIds.map(qid => qMap.get(qid)).filter(Boolean) as Question[];
+          // Append any newly added questions that were not in cached order
+          qList.forEach(q => {
+            if (!finalQuestions.some(fq => fq.id === q.id)) finalQuestions.push(q);
+          });
+        }
+      } catch {
+        finalQuestions = [];
+      }
+
+      if (finalQuestions.length !== qList.length || finalQuestions.length === 0) {
+        finalQuestions = [...qList];
+        for (let i = finalQuestions.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [finalQuestions[i], finalQuestions[j]] = [finalQuestions[j], finalQuestions[i]];
+        }
+        try {
+          sessionStorage.setItem(shuffleKey, JSON.stringify(finalQuestions.map(q => q.id)));
+        } catch {
+          // ignore session storage error
+        }
+      }
+
+      setQuestions(finalQuestions);
       setLoading(false);
     };
 
     fetchData();
-  }, [id]);
+  }, [id, user]);
 
   // Persistent Countdown & Duration Enforcement Effect
   useEffect(() => {
@@ -131,6 +179,156 @@ export default function QuizTakePage() {
     return () => clearInterval(timerInterval);
   }, [loading, authLoading, quiz, hasEnteredName, user, isFinished, guestName]);
 
+  // Anti-Cheat: Tab Switch & Window Blur Detection
+  useEffect(() => {
+    if (loading || authLoading || !quiz || isFinished) return;
+    const isReady = user || hasEnteredName;
+    if (!isReady || status !== 'available') return;
+
+    const playAlertBeep = () => {
+      try {
+        const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+        const osc = audioCtx.createOscillator();
+        const gainNode = audioCtx.createGain();
+        osc.connect(gainNode);
+        gainNode.connect(audioCtx.destination);
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(440, audioCtx.currentTime);
+        osc.frequency.setValueAtTime(220, audioCtx.currentTime + 0.1);
+        gainNode.gain.setValueAtTime(0.08, audioCtx.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.3);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.3);
+      } catch (e) {
+        // ignore audio errors
+      }
+    };
+
+    const handleViolation = () => {
+      if (isFinished || isSubmittingRef.current || warningActiveRef.current) return;
+
+      warningActiveRef.current = true;
+      playAlertBeep();
+
+      const newCount = tabSwitchCountRef.current + 1;
+      setTabSwitchCount(newCount);
+      const userKey = user ? user.uid : `guest_${guestName.trim().replace(/\s+/g, '_')}`;
+      sessionStorage.setItem(`lms_tab_switches_${quiz.id}_${userKey}`, newCount.toString());
+
+      if (newCount >= maxViolations) {
+        // Disqualify and auto-submit
+        Swal.fire({
+          title: '🛑 Batas Pindah Tab Terlampaui!',
+          html: `
+            <div class="text-left space-y-3 text-sm text-slate-700 dark:text-slate-300">
+              <p class="font-bold text-red-600 dark:text-red-400">
+                Anda telah berpindah tab atau meninggalkan jendela ujian sebanyak <b>${newCount} kali</b>.
+              </p>
+              <div class="p-3 bg-red-50 dark:bg-red-900/30 rounded-xl border border-red-200 dark:border-red-800 text-xs text-red-800 dark:text-red-200">
+                Sesuai peraturan integritas ujian, Anda <b>tidak diijinkan membuka tab lain</b>. Kuis Anda <b>otomatis dikumpulkan dan didiskualifikasi</b> oleh sistem sekarang.
+              </div>
+            </div>
+          `,
+          icon: 'error',
+          confirmButtonText: 'Kumpulkan Sekarang',
+          confirmButtonColor: '#dc2626',
+          allowOutsideClick: false,
+          allowEscapeKey: false
+        }).then(() => {
+          warningActiveRef.current = false;
+          handleSubmit({ disqualified: true, violations: newCount });
+        });
+      } else if (newCount === 2) {
+        Swal.fire({
+          title: '🚨 Peringatan 2/3: Peringatan Terakhir!',
+          html: `
+            <div class="text-left space-y-3 text-sm text-slate-700 dark:text-slate-300">
+              <p class="font-bold text-red-600 dark:text-red-400">
+                Anda kembali terdeteksi berpindah tab atau meminimalkan browser!
+              </p>
+              <div class="p-3 bg-red-50 dark:bg-red-900/30 rounded-xl border border-red-200 dark:border-red-800 text-xs text-red-800 dark:text-red-200">
+                <b>PERINGATAN KERAS:</b> Jika Anda berpindah tab <b>1 KALI LAGI</b>, kuis Anda akan langsung <b>otomatis di-submit</b> dan didiskualifikasi!
+              </div>
+              <p class="text-xs text-slate-500 font-semibold">
+                Pelanggaran tercatat: <b>${newCount} dari ${maxViolations}</b>. Sisa toleransi: <b>1 kali</b>.
+              </p>
+            </div>
+          `,
+          icon: 'warning',
+          confirmButtonText: 'Saya Paham & Kembali Mengerjakan',
+          confirmButtonColor: '#dc2626',
+          allowOutsideClick: false,
+          allowEscapeKey: false
+        }).then(() => {
+          warningActiveRef.current = false;
+        });
+      } else {
+        // 1st warning
+        Swal.fire({
+          title: '⚠️ Dilarang Berpindah Tab!',
+          html: `
+            <div class="text-left space-y-3 text-sm text-slate-700 dark:text-slate-300">
+              <p class="font-bold text-amber-600 dark:text-amber-400">
+                Peringatan Pelanggaran (1 dari ${maxViolations})
+              </p>
+              <p>
+                Selama kuis berlangsung, Anda <b>tidak diijinkan berpindah tab</b>, membuka tab baru, atau beralih jendela aplikasi lain.
+              </p>
+              <div class="p-3 bg-amber-50 dark:bg-amber-900/30 rounded-xl border border-amber-200 dark:border-amber-800 text-xs text-amber-800 dark:text-amber-200">
+                Sisa toleransi: <b>${maxViolations - newCount} kali lagi</b> sebelum kuis otomatis dikumpulkan dan didiskualifikasi.
+              </div>
+            </div>
+          `,
+          icon: 'warning',
+          confirmButtonText: 'Kembali ke Kuis',
+          confirmButtonColor: '#2563eb',
+          allowOutsideClick: false,
+          allowEscapeKey: false
+        }).then(() => {
+          warningActiveRef.current = false;
+        });
+      }
+    };
+
+    const onVisibilityChange = () => {
+      if (document.hidden) {
+        handleViolation();
+      }
+    };
+
+    const onWindowBlur = () => {
+      setTimeout(() => {
+        if (!document.hasFocus() && !Swal.isVisible()) {
+          handleViolation();
+        }
+      }, 350);
+    };
+
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    window.addEventListener('blur', onWindowBlur);
+
+    // Disable right-click & copy key combinations during the exam
+    const preventContextMenu = (e: MouseEvent) => e.preventDefault();
+    const preventKeyShortcuts = (e: KeyboardEvent) => {
+      if (
+        (e.ctrlKey || e.metaKey) && 
+        ['c', 'v', 'u', 'a', 'p', 's'].includes(e.key.toLowerCase())
+      ) {
+        e.preventDefault();
+      }
+    };
+
+    document.addEventListener('contextmenu', preventContextMenu);
+    document.addEventListener('keydown', preventKeyShortcuts);
+
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      window.removeEventListener('blur', onWindowBlur);
+      document.removeEventListener('contextmenu', preventContextMenu);
+      document.removeEventListener('keydown', preventKeyShortcuts);
+    };
+  }, [loading, authLoading, quiz, isFinished, user, hasEnteredName, status, guestName]);
+
   const autoSubmit = () => {
     Swal.fire({
       title: 'Waktu Habis!',
@@ -147,9 +345,13 @@ export default function QuizTakePage() {
     setAnswers({ ...answers, [currentIndex]: optionIndex });
   };
 
-  const handleSubmit = async () => {
-    if (isFinished) return;
+  const handleSubmit = async (options?: { disqualified?: boolean; violations?: number }) => {
+    if (isFinished || isSubmittingRef.current) return;
+    isSubmittingRef.current = true;
     setIsFinished(true);
+
+    const isDisqualified = options?.disqualified || false;
+    const finalViolations = options?.violations !== undefined ? options.violations : tabSwitchCountRef.current;
     
     // Always use up-to-date answers reference to avoid interval stale closure
     const activeAnswers = answersRef.current;
@@ -161,7 +363,9 @@ export default function QuizTakePage() {
       }
     });
 
-    const score = Math.round((correctCount / questions.length) * 100);
+    const score = isDisqualified 
+      ? 0 
+      : Math.round((correctCount / questions.length) * 100);
     const timeSpentSeconds = quiz ? Math.max(0, (quiz.timeLimit * 60) - timeLeft) : 0;
 
     const isGuest = !user;
@@ -180,7 +384,10 @@ export default function QuizTakePage() {
       correctCount,
       totalQuestions: questions.length,
       completedAt: new Date().toISOString(),
-      timeSpentSeconds
+      timeSpentSeconds,
+      tabSwitchViolations: finalViolations,
+      disqualified: isDisqualified,
+      ...(isDisqualified && { disqualifiedReason: 'Melanggar aturan: Berpindah tab melebihi batas toleransi' })
     };
 
     try {
@@ -190,15 +397,21 @@ export default function QuizTakePage() {
       // Clean up the durable start timestamp upon successful submission
       const userIdentifier = user ? user.uid : `guest_${guestName.trim().replace(/\s+/g, '_')}`;
       localStorage.removeItem(`lms_quiz_start_epoch_${id}_${userIdentifier}`);
+      sessionStorage.removeItem(`lms_tab_switches_${id}_${userIdentifier}`);
+      sessionStorage.removeItem(`lms_quiz_shuffled_${id}_${userIdentifier}`);
 
-      Swal.fire({
-        title: 'Kuis Terkirim!',
-        text: `Kerja bagus, ${result.studentName}! Skor Anda & akurasi Anda adalah ${score}% (${correctCount}/${questions.length})`,
-        icon: score >= 70 ? 'success' : 'info',
-        confirmButtonText: 'Tinjau Jawaban'
-      }).then(() => {
+      if (!isDisqualified) {
+        Swal.fire({
+          title: 'Kuis Terkirim!',
+          text: `Kerja bagus, ${result.studentName}! Skor Anda adalah ${score}% (${correctCount}/${questions.length})`,
+          icon: score >= 70 ? 'success' : 'info',
+          confirmButtonText: 'Tinjau Jawaban'
+        }).then(() => {
+          setShowResults(true);
+        });
+      } else {
         setShowResults(true);
-      });
+      }
     } catch (err) {
       console.error(err);
       Swal.fire('Error', 'Failed to save results.', 'error');
@@ -254,6 +467,31 @@ export default function QuizTakePage() {
             <h1 className="text-4xl font-black text-slate-900 dark:text-white uppercase tracking-tight">Assessment Summary</h1>
             <p className="text-slate-500 dark:text-slate-400 font-medium">Great effort, {resultData.studentName}! Here is how you performed.</p>
           </div>
+
+          {resultData.disqualified && (
+            <div className="p-5 rounded-2xl bg-red-50 dark:bg-red-900/20 border-2 border-red-500/40 text-red-900 dark:text-red-200 text-left flex items-start gap-4 shadow-sm">
+              <div className="p-2.5 rounded-xl bg-red-100 dark:bg-red-900/40 text-red-600 shrink-0">
+                <AlertCircle className="w-6 h-6" />
+              </div>
+              <div>
+                <h4 className="text-base font-black uppercase tracking-tight text-red-700 dark:text-red-400">
+                  Ujian Didiskualifikasi Sistem
+                </h4>
+                <p className="text-sm font-medium mt-1">
+                  Anda tercatat berpindah tab sebanyak <b>{resultData.tabSwitchViolations || 3} kali</b>, melampaui batas toleransi ujian. Kuis otomatis dikumpulkan dan nilai dibatalkan (0%).
+                </p>
+              </div>
+            </div>
+          )}
+
+          {!resultData.disqualified && resultData.tabSwitchViolations && resultData.tabSwitchViolations > 0 && (
+            <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-200 text-left flex items-center gap-3">
+              <AlertCircle className="w-5 h-5 text-amber-600 shrink-0" />
+              <p className="text-xs font-semibold">
+                <b>Catatan Integritas Ujian:</b> Terdeteksi <b>{resultData.tabSwitchViolations} kali</b> perpindahan tab/jendela selama kuis berlangsung.
+              </p>
+            </div>
+          )}
         </header>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -439,7 +677,40 @@ export default function QuizTakePage() {
   const timerProgress = quiz ? (timeLeft / (quiz.timeLimit * 60)) * 100 : 0;
 
   return (
-    <div className="max-w-3xl mx-auto space-y-6">
+    <div className="max-w-3xl mx-auto space-y-6 select-none">
+      {/* Anti-Cheat Proctoring Status Banner */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-5 py-3.5 rounded-2xl bg-slate-900 text-white dark:bg-slate-800 border border-slate-700/60 shadow-lg">
+        <div className="flex items-center gap-3">
+          <span className="relative flex h-3 w-3 shrink-0">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+          </span>
+          <div>
+            <div className="flex items-center gap-1.5">
+              <ShieldAlert className="w-4 h-4 text-emerald-400 shrink-0" />
+              <span className="text-xs font-black uppercase tracking-wider text-slate-100">
+                Mode Ujian Terproteksi: Dilarang Pindah Tab
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-400 font-medium">
+              Sistem memantau fokus browser. Dilarang membuka tab lain atau beralih aplikasi.
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
+          <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Toleransi:</span>
+          <span className={`px-3 py-1 rounded-xl text-[10px] font-black uppercase tracking-wider ${
+            tabSwitchCount === 0 
+              ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' 
+              : tabSwitchCount === 1 
+              ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' 
+              : 'bg-red-500/20 text-red-300 border border-red-500/30 animate-pulse'
+          }`}>
+            {tabSwitchCount === 0 ? 'Aman (0/3)' : `Pelanggaran ${tabSwitchCount}/3`}
+          </span>
+        </div>
+      </div>
+
       {/* Header with Timer */}
       <div className="flex items-center justify-between bg-white dark:bg-slate-900 p-4 sm:p-8 rounded-2xl sm:rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm sticky top-16 sm:top-20 z-40">
         <div className="flex items-center space-x-3 sm:space-x-4">
@@ -580,7 +851,7 @@ export default function QuizTakePage() {
 
         {currentIndex === questions.length - 1 ? (
           <button
-            onClick={handleSubmit}
+            onClick={() => handleSubmit()}
             className="flex items-center justify-center px-6 sm:px-12 py-4 bg-slate-900 dark:bg-slate-800 text-white font-black rounded-2xl hover:bg-slate-800 transition-all shadow-xl shadow-slate-200 dark:shadow-none hover:scale-[1.02] active:scale-95 uppercase text-xs tracking-widest"
           >
             Finish & Submit

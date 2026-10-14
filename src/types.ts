@@ -53,6 +53,9 @@ export interface Result {
   totalQuestions: number;
   completedAt: string;
   timeSpentSeconds: number;
+  tabSwitchViolations?: number;
+  disqualified?: boolean;
+  disqualifiedReason?: string;
 }
 
 export interface QuizTemplate {

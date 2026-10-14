@@ -173,7 +173,9 @@ export default function QuizAnalyticsPage() {
       'Peringkat': index + 1,
       'Nama Mahasiswa': r.studentName,
       'Nilai (%)': r.score,
-      'Status': r.score >= 70 ? 'LULUS' : 'REMEDIAL',
+      'Status': r.disqualified ? 'DISKUALIFIKASI' : (r.score >= 70 ? 'LULUS' : 'REMEDIAL'),
+      'Pelanggaran Pindah Tab': r.tabSwitchViolations || 0,
+      'Catatan Integritas': r.disqualified ? 'DISKUALIFIKASI (Pindah Tab)' : (r.tabSwitchViolations ? `${r.tabSwitchViolations}x Pindah Tab` : 'Tertib / Bersih'),
       'Jawaban Benar': r.correctCount,
       'Total Soal': r.totalQuestions,
       'Durasi Pengerjaan': `${Math.floor((r.timeSpentSeconds || 0) / 60)} menit ${(r.timeSpentSeconds || 0) % 60} detik`,
@@ -211,7 +213,9 @@ export default function QuizAnalyticsPage() {
       'Peringkat': index + 1,
       'Nama Mahasiswa': r.studentName,
       'Nilai (%)': r.score,
-      'Status': r.score >= 70 ? 'LULUS' : 'REMEDIAL',
+      'Status': r.disqualified ? 'DISKUALIFIKASI' : (r.score >= 70 ? 'LULUS' : 'REMEDIAL'),
+      'Pelanggaran Pindah Tab': r.tabSwitchViolations || 0,
+      'Catatan Integritas': r.disqualified ? 'DISKUALIFIKASI (Pindah Tab)' : (r.tabSwitchViolations ? `${r.tabSwitchViolations}x Pindah Tab` : 'Tertib / Bersih'),
       'Jawaban Benar': r.correctCount,
       'Total Soal': r.totalQuestions,
       'Durasi': `${Math.floor((r.timeSpentSeconds || 0) / 60)}m ${(r.timeSpentSeconds || 0) % 60}s`,
@@ -490,7 +494,18 @@ export default function QuizAnalyticsPage() {
                   </div>
                   <div>
                     <p className="text-sm font-black text-slate-900 dark:text-white tracking-tight uppercase leading-none mb-1.5">{res.studentName}</p>
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{format(new Date(res.completedAt), 'MMM d, h:mm a')}</p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{format(new Date(res.completedAt), 'MMM d, h:mm a')}</p>
+                      {res.disqualified ? (
+                        <span className="px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300">
+                          🛑 Didiskualifikasi (Pindah Tab)
+                        </span>
+                      ) : res.tabSwitchViolations && res.tabSwitchViolations > 0 ? (
+                        <span className="px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
+                          ⚠️ {res.tabSwitchViolations}x Pindah Tab
+                        </span>
+                      ) : null}
+                    </div>
                   </div>
                 </div>
                 <div className="flex items-center space-x-4">
